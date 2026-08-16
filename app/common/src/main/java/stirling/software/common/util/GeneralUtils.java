@@ -12,6 +12,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -54,6 +55,10 @@ public class GeneralUtils {
 
     private final String DEFAULT_WEBUI_CONFIGS_DIR = "defaultWebUIConfigs";
     private final String PYTHON_SCRIPTS_DIR = "python";
+
+    // Extracted once per run. Rewriting a script while another request is exec-ing it
+    // races wherever rename is not atomic, such as 9p or NFS bind mounts.
+    private final Map<String, Path> EXTRACTED_SCRIPTS = new ConcurrentHashMap<>();
     private final RegexPatternUtils patternCache = RegexPatternUtils.getInstance();
     // Valid size units used for convertSizeToBytes validation and parsing
     private final Set<String> VALID_SIZE_UNITS = Set.of("B", "KB", "MB", "GB", "TB");
@@ -344,6 +349,20 @@ public class GeneralUtils {
      * @param host the hostname to resolve
      * @return {@code true} if the host should be considered unsafe
      */
+    /**
+     * Whether the server should refuse to contact this host.
+     *
+     * <p>Same check {@link #isURLReachable(String)} applies, exposed on its own for callers that
+     * are about to make the request themselves and need the guard without paying for an extra probe
+     * first. Resolution failures count as unsafe.
+     *
+     * @param host hostname or literal address taken from a URL
+     * @return {@code true} if the host resolves into a range that must not be reached
+     */
+    public boolean isSensitiveHost(String host) {
+        return isDisallowedNetworkLocation(host);
+    }
+
     private boolean isDisallowedNetworkLocation(String host) {
         // Resolution is delegated to the JVM/OS resolver which already applies system
         // configured query limits and timeouts. We only need the resolved addresses here so
@@ -941,7 +960,7 @@ public class GeneralUtils {
             }
 
             // If no MAC address found, use hostname as fallback
-            if (sb.length() == 0) {
+            if (sb.isEmpty()) {
                 String hostname = InetAddress.getLocalHost().getHostName();
                 sb.append(hostname != null ? hostname : "unknown-host");
                 log.warn("No MAC address found, using hostname for fingerprint generation");
@@ -1025,17 +1044,30 @@ public class GeneralUtils {
         }
 
         Path scriptsDir = Path.of(InstallationPathConfig.getScriptsPath(), PYTHON_SCRIPTS_DIR);
-        Files.createDirectories(scriptsDir);
-
         Path target = scriptsDir.resolve(scriptName);
-        ClassPathResource res =
-                new ClassPathResource("static/" + PYTHON_SCRIPTS_DIR + "/" + scriptName);
-        if (!res.exists()) {
-            log.error("Resource not found: {}", res.getPath());
-            throw new IOException("Resource not found: " + res.getPath());
+
+        Path cached = EXTRACTED_SCRIPTS.get(scriptName);
+        if (cached != null && Files.isRegularFile(cached)) {
+            return cached;
         }
-        copyResourceToFile(res, target);
-        return target;
+
+        synchronized (EXTRACTED_SCRIPTS) {
+            cached = EXTRACTED_SCRIPTS.get(scriptName);
+            if (cached != null && Files.isRegularFile(cached)) {
+                return cached;
+            }
+
+            Files.createDirectories(scriptsDir);
+            ClassPathResource res =
+                    new ClassPathResource("static/" + PYTHON_SCRIPTS_DIR + "/" + scriptName);
+            if (!res.exists()) {
+                log.error("Resource not found: {}", res.getPath());
+                throw new IOException("Resource not found: " + res.getPath());
+            }
+            copyResourceToFile(res, target);
+            EXTRACTED_SCRIPTS.put(scriptName, target);
+            return target;
+        }
     }
 
     /*

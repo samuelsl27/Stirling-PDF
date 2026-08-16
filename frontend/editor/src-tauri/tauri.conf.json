@@ -38,7 +38,7 @@
       "icons/128x128.png",
       "icons/192x192.png"
     ],
-    "resources": ["libs/*.jar", "runtime/jre/**/*", "tesseract/**/*"],
+    "resources": ["libs/*.jar", "runtime/jre/**/*"],
     "fileAssociations": [
       {
         "ext": ["pdf"],
@@ -65,6 +65,7 @@
       "timestampUrl": "http://timestamp.digicert.com",
       "wix": {
         "upgradeCode": "3305fba9-7e5e-5c09-bc71-eca0a65f4fee",
+        "template": "windows/wix/main.wxs",
         "bannerPath": "windows/wix/banner.bmp",
         "dialogImagePath": "windows/wix/dialog.bmp",
         "fragmentPaths": ["windows/wix/provisioning.wxs"],

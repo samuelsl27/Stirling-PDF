@@ -284,8 +284,12 @@ class RuntimePathConfigTest {
             assertEquals("ebook-convert", config.getCalibrePath());
             assertEquals("ocrmypdf", config.getOcrMyPdfPath());
             assertEquals("soffice", config.getSOfficePath());
-            // No Tesseract is bundled in a source checkout, so the PATH lookup name is kept.
-            assertEquals("tesseract", config.getTesseractPath());
+            // Tesseract is deliberately absent from this list. It is the one tool resolved
+            // against the installer's bundle directories, and one of those is machine-wide, so
+            // on a host that has actually installed OCR this correctly answers with a real path
+            // instead of a bare name. Asserting a bare name here passes in CI and fails on any
+            // developer machine that uses the feature - which is exactly what it did. The
+            // resolution itself is covered against a simulated layout in BundledResources.
         }
 
         @Test
@@ -311,14 +315,16 @@ class RuntimePathConfigTest {
         }
 
         @Test
-        @DisplayName("Blank tesseract path falls back to the PATH lookup name")
+        @DisplayName("A blank tesseract path is treated as no setting at all")
         void blankTesseractPathFallsBack() {
-            ApplicationProperties properties = newProperties();
-            properties.getSystem().getCustomPaths().getOperations().setTesseract("  ");
+            ApplicationProperties blank = newProperties();
+            blank.getSystem().getCustomPaths().getOperations().setTesseract("  ");
 
-            RuntimePathConfig config = build(properties);
-
-            assertEquals("tesseract", config.getTesseractPath());
+            // Against the unset config rather than a literal, because what the fallback resolves
+            // to depends on whether this host has a bundled runtime. The claim being made is
+            // that whitespace is indistinguishable from absence, and that holds either way.
+            assertEquals(
+                    build(newProperties()).getTesseractPath(), build(blank).getTesseractPath());
         }
 
         @Test
@@ -403,6 +409,35 @@ class RuntimePathConfigTest {
 
             assertTrue(found.isPresent());
             assertEquals(root.resolve("tesseract/tessdata").toAbsolutePath(), found.get());
+        }
+
+        @Test
+        @DisplayName("The machine-wide data directory is one of the roots")
+        void machineWideRootIsProbed() {
+            // The Windows installer runs elevated and installs the OCR runtime for every account,
+            // so it lands here rather than in any one user's profile. Leaving this root out is not
+            // a theoretical gap: it shipped, and the application reported "not installed" over a
+            // perfectly good installation and downloaded a second 122 MB copy beside it.
+            Optional<Path> machineWide = RuntimePathConfig.machineWideDataDir();
+            assertTrue(machineWide.isPresent(), "every supported platform has one");
+
+            assertTrue(
+                    RuntimePathConfig.bundleRoots().contains(machineWide.get()),
+                    "bundleRoots() must include " + machineWide.get());
+        }
+
+        @Test
+        @DisplayName("A per-user runtime is preferred over the machine-wide one")
+        void perUserWinsOverMachineWide() {
+            List<Path> roots = RuntimePathConfig.bundleRoots();
+            Path machineWide = RuntimePathConfig.machineWideDataDir().orElseThrow();
+
+            // Last on purpose: an install someone made for themselves should take precedence over
+            // whatever an administrator put there for everyone.
+            assertEquals(
+                    roots.size() - 1,
+                    roots.indexOf(machineWide),
+                    "the machine-wide root belongs last");
         }
 
         @Test

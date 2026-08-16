@@ -9,11 +9,20 @@ import {
   Alert,
 } from "@mantine/core";
 import { Button } from "@app/ui/Button";
+import { Select } from "@app/ui/Select";
+import { FormField } from "@app/ui/FormField";
 import { useTranslation } from "react-i18next";
 import { CertSignParameters } from "@app/hooks/tools/certSign/useCertSignParameters";
 import { useAllFiles } from "@app/contexts/FileContext";
+import FileUploadButton from "@app/components/shared/FileUploadButton";
 import SignaturePlacementPicker from "@app/components/tools/certSign/SignaturePlacementPicker";
 import SignatureAttributePicker from "@app/components/tools/certSign/SignatureAttributePicker";
+import {
+  DEFAULT_SIGNATURE_LOGO_POSITION,
+  LOGO_POSITION_FALLBACKS,
+  SIGNATURE_LOGO_POSITIONS,
+  type SignatureLogoPosition,
+} from "@app/constants/certSignConstants";
 import {
   SIGNATURE_PLACEMENT_CANCEL_EVENT,
   SIGNATURE_PLACEMENT_DONE_EVENT,
@@ -23,7 +32,10 @@ import {
 
 interface SignatureAppearanceSettingsProps {
   parameters: CertSignParameters;
-  onParameterChange: (key: keyof CertSignParameters, value: any) => void;
+  onParameterChange: <K extends keyof CertSignParameters>(
+    key: K,
+    value: CertSignParameters[K],
+  ) => void;
   disabled?: boolean;
 }
 
@@ -36,7 +48,10 @@ const SignatureAppearanceSettings = ({
   const { files, fileStubs } = useAllFiles();
   const [isPlacing, setIsPlacing] = useState(false);
 
-  const selectedFile = useMemo(() => (files.length > 0 ? files[0] : null), [files]);
+  const selectedFile = useMemo(
+    () => (files.length > 0 ? files[0] : null),
+    [files],
+  );
   const selectedStub = useMemo(
     () => (fileStubs.length > 0 ? fileStubs[0] : null),
     [fileStubs],
@@ -162,7 +177,12 @@ const SignatureAppearanceSettings = ({
           <NumberInput
             label={t("certSign.pageNumber", "Page Number")}
             value={parameters.pageNumber}
-            onChange={(value) => onParameterChange("pageNumber", value || 1)}
+            onChange={(value) =>
+              onParameterChange(
+                "pageNumber",
+                typeof value === "number" ? value : 1,
+              )
+            }
             min={1}
             disabled={disabled}
           />
@@ -216,6 +236,52 @@ const SignatureAppearanceSettings = ({
                 </div>
               </Button>
             </div>
+            {parameters.showLogo && (
+              <Stack gap="xs">
+                <FileUploadButton
+                  file={parameters.logoImage}
+                  onChange={(file) =>
+                    onParameterChange("logoImage", file || undefined)
+                  }
+                  accept="image/png,image/jpeg"
+                  disabled={disabled}
+                  placeholder={t(
+                    "certSign.logo.choose",
+                    "Choose a logo image (PNG or JPEG)",
+                  )}
+                />
+                <Text c="dimmed" size="xs">
+                  {t(
+                    "certSign.logo.hint",
+                    "Leave empty to use the built-in Stirling PDF mark.",
+                  )}
+                </Text>
+                <FormField
+                  label={t("certSign.logo.positionLabel", "Logo position")}
+                >
+                  <Select
+                    options={SIGNATURE_LOGO_POSITIONS.map((position) => ({
+                      value: position,
+                      label: t(
+                        `certSign.logo.position.${position}`,
+                        LOGO_POSITION_FALLBACKS[position],
+                      ),
+                    }))}
+                    value={
+                      parameters.logoPosition ?? DEFAULT_SIGNATURE_LOGO_POSITION
+                    }
+                    onChange={(value) =>
+                      onParameterChange(
+                        "logoPosition",
+                        (value as SignatureLogoPosition | null) ??
+                          DEFAULT_SIGNATURE_LOGO_POSITION,
+                      )
+                    }
+                    disabled={disabled}
+                  />
+                </FormField>
+              </Stack>
+            )}
           </Stack>
 
           <Divider />

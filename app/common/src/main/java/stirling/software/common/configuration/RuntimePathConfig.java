@@ -86,7 +86,7 @@ public class RuntimePathConfig {
                         defaultWatchedFolders,
                         watchedFoldersDirs,
                         pipeline != null ? pipeline.getWatchedFoldersDir() : null);
-        this.pipelineWatchedFoldersPath = this.pipelineWatchedFoldersPaths.get(0);
+        this.pipelineWatchedFoldersPath = this.pipelineWatchedFoldersPaths.getFirst();
         this.pipelineFinishedFoldersPath =
                 resolvePath(
                         defaultFinishedFolders,
@@ -182,9 +182,15 @@ public class RuntimePathConfig {
     /**
      * Locates a file or directory bundled alongside the application.
      *
+     * <p>Public because anything that installs or inspects one of these tools has to look in
+     * exactly the same places, in the same order, as the code that later runs it. Keeping a second
+     * opinion about where a runtime lives is how an installer ends up putting the engine somewhere
+     * the application then reports as missing - which is precisely what happened before this was
+     * shared.
+     *
      * @return the first candidate that exists on disk, or empty when nothing is bundled
      */
-    private static Optional<Path> findBundledPath(String relativePath) {
+    public static Optional<Path> findBundledPath(String relativePath) {
         return findBundledPath(bundleRoots(), relativePath);
     }
 
@@ -214,7 +220,7 @@ public class RuntimePathConfig {
      * getCodeSource()} unusable here. The desktop bundler puts the JAR in {@code <root>/libs} and
      * the bundled tools in {@code <root>}, so the home directory's parent is probed as well.
      */
-    private static List<Path> bundleRoots() {
+    public static List<Path> bundleRoots() {
         List<Path> roots = new ArrayList<>();
         // Explicit configuration first: an operator who set a base path meant it.
         roots.add(Path.of(InstallationPathConfig.getPath()));
@@ -227,7 +233,36 @@ public class RuntimePathConfig {
                                 roots.add(parent);
                             }
                         });
+        // Last, because a per-user copy should win: the Windows installer runs
+        // elevated and installs OCR for every account, so what it wrote lives
+        // here rather than in any one user's profile.
+        machineWideDataDir().ifPresent(roots::add);
         return roots;
+    }
+
+    /**
+     * Where a per-machine installer can leave shared, writable application data.
+     *
+     * <p>Mirrors {@code system_provisioning_dir()} on the desktop side, so both halves agree on one
+     * location instead of each inventing its own.
+     */
+    public static Optional<Path> machineWideDataDir() {
+        try {
+            if (isWindows()) {
+                String programData = java.lang.System.getenv("PROGRAMDATA");
+                return StringUtils.isBlank(programData)
+                        ? Optional.empty()
+                        : Optional.of(Path.of(programData, "Stirling-PDF"));
+            }
+            String os = java.lang.System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+            if (os.contains("mac")) {
+                return Optional.of(Path.of("/Library", "Application Support", "Stirling-PDF"));
+            }
+            return Optional.of(Path.of("/etc", "stirling-pdf"));
+        } catch (InvalidPathException | SecurityException e) {
+            log.debug("No machine-wide data directory available", e);
+            return Optional.empty();
+        }
     }
 
     private static Optional<Path> applicationHome() {
