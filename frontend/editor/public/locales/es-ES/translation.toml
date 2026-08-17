@@ -2500,7 +2500,7 @@ title = "Firmas invisibles"
 bullet1 = "PNG o JPEG; la imagen conserva sus proporciones, nunca se deforma"
 bullet2 = "Colócalo junto al texto, encima, debajo o detrás"
 bullet3 = "Detrás lo dibuja como marca de agua atenuada, para que el texto siga legible encima"
-bullet4 = "El texto conserva su parte del recuadro, por ancho que sea el logotipo"
+bullet4 = "Ocupa todo el sitio que los datos puedan cederle, así que en un recuadro mayor se ve mayor"
 text = "Sube el logotipo de tu organización para mostrarlo dentro del recuadro de la firma y elige dónde se coloca. Si lo dejas vacío se usa la marca incluida de Stirling PDF."
 title = "Añadir tu logotipo"
 
