@@ -1,6 +1,7 @@
 package stirling.software.SPDF.controller.api.security;
 
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.beans.PropertyEditorSupport;
 import java.io.*;
 import java.nio.file.Files;
@@ -10,6 +11,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Calendar;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -197,7 +199,7 @@ public class CertSignController {
                                 doc,
                                 pageNumber != null ? pageNumber : 0,
                                 box,
-                                instance.displayLines(signature, visibleAttributes),
+                                instance.displayFields(signature, visibleAttributes),
                                 instance.effectiveLogo(showLogo));
                 log.info(
                         "Stamped the signature mark on {} page(s); only page {} carries the"
@@ -354,6 +356,8 @@ public class CertSignController {
         CreateSignature createSignature =
                 new CreateSignature(ks, pin, request.getAlias(), signingProvider);
         createSignature.setCustomLogo(readLogo(request.getLogoImage(), request.getLogoPosition()));
+        createSignature.setAttributeLabels(
+                zipLabels(request.getVisibleAttributes(), request.getVisibleAttributeLabels()));
         TempFile signedOut = tempFileManager.createManagedTempFile(".pdf");
         try (OutputStream os = new FileOutputStream(signedOut.getFile())) {
             sign(
@@ -433,6 +437,26 @@ public class CertSignController {
      * obviously wrong upload here gives the user a clear message instead of a decoding failure
      * halfway through signing.
      */
+    /**
+     * Pairs each selected attribute with the label the caller wants drawn for it.
+     *
+     * <p>The two lists come from a form, so they can disagree; anything the labels do not cover
+     * keeps the English one, which is the same outcome as sending no labels at all.
+     */
+    private static Map<CertificateAttribute, String> zipLabels(
+            List<CertificateAttribute> attributes, List<String> labels) {
+        if (attributes == null || labels == null) {
+            return Map.of();
+        }
+        Map<CertificateAttribute, String> zipped = new EnumMap<>(CertificateAttribute.class);
+        for (int i = 0; i < Math.min(attributes.size(), labels.size()); i++) {
+            if (attributes.get(i) != null && labels.get(i) != null && !labels.get(i).isBlank()) {
+                zipped.put(attributes.get(i), labels.get(i));
+            }
+        }
+        return zipped;
+    }
+
     private boolean isSupportedLogoType(MultipartFile logoImage) {
         String contentType = logoImage.getContentType();
         if (contentType != null) {
@@ -489,6 +513,18 @@ public class CertSignController {
          * appearance builder owns what the signature looks like.
          */
         private SignatureLogoPlacement.Logo customLogo;
+
+        private Map<CertificateAttribute, String> attributeLabels = Map.of();
+
+        /**
+         * Sets what to draw in front of each value.
+         *
+         * <p>Carried on the signer for the same reason the logo is: this class owns how the
+         * signature looks, and {@code sign(...)} already takes thirteen arguments.
+         */
+        public void setAttributeLabels(Map<CertificateAttribute, String> attributeLabels) {
+            this.attributeLabels = attributeLabels != null ? attributeLabels : Map.of();
+        }
 
         public void setCustomLogo(SignatureLogoPlacement.Logo customLogo) {
             this.customLogo = customLogo;
@@ -572,6 +608,18 @@ public class CertSignController {
                     : (float) image.getWidth() / (float) image.getHeight();
         }
 
+        /**
+         * Whether the legacy placement keeps the image inside the box it is clipped to.
+         *
+         * <p>True for the bundled mark, which is why that path can go on drawing the image at a
+         * size taken from its own pixels rather than from the box.
+         */
+        private static boolean fitsAtLegacySize(PDImageXObject image, PDRectangle bbox) {
+            return LEGACY_LOGO_X * LEGACY_LOGO_SCALE + image.getWidth() * LEGACY_LOGO_SCALE
+                            <= bbox.getWidth()
+                    && image.getHeight() * LEGACY_LOGO_SCALE <= bbox.getHeight();
+        }
+
         public InputStream createVisibleSignature(
                 PDDocument srcDoc,
                 PDSignature signature,
@@ -596,12 +644,19 @@ public class CertSignController {
 
                 // Without a requested box, keep the historical bottom-left placement so existing
                 // callers see no change in where their signatures land.
+                PDPage sourcePage = srcDoc.getPage(pageNumber);
                 PDRectangle rect =
                         box != null
-                                ? box.toPdfRectangle(srcDoc.getPage(pageNumber).getMediaBox())
+                                ? box.toPdfRectangle(sourcePage)
                                 : new PDRectangle(0, 0, 200, 50);
 
                 widget.setRectangle(rect);
+
+                // A page can be stored one way up and displayed another. The box arrived measured
+                // against what the reader sees, so the appearance is drawn that way round and
+                // turned to match the page, or the signature would read sideways.
+                int turn = box != null ? SignatureBox.quarterTurn(sourcePage) : 0;
+                boolean sideways = turn == 90 || turn == 270;
 
                 // from PDVisualSigBuilder.createHolderForm()
                 PDStream stream = new PDStream(doc);
@@ -609,9 +664,15 @@ public class CertSignController {
                 PDResources res = new PDResources();
                 form.setResources(res);
                 form.setFormType(1);
-                PDRectangle bbox = new PDRectangle(rect.getWidth(), rect.getHeight());
+                PDRectangle bbox =
+                        sideways
+                                ? new PDRectangle(rect.getHeight(), rect.getWidth())
+                                : new PDRectangle(rect.getWidth(), rect.getHeight());
                 float height = bbox.getHeight();
                 form.setBBox(bbox);
+                if (turn != 0) {
+                    form.setMatrix(AffineTransform.getRotateInstance(Math.toRadians(turn)));
+                }
                 PDFont font = new PDType1Font(FontName.TIMES_BOLD);
 
                 // from PDVisualSigBuilder.createAppearanceDictionary()
@@ -634,30 +695,31 @@ public class CertSignController {
                     if (Boolean.TRUE.equals(showLogo)) {
                         PDImageXObject img = loadLogoImage(doc);
 
-                        if (legacyAppearance) {
+                        if (legacyAppearance && fitsAtLegacySize(img, bbox)) {
                             cs.saveGraphicsState();
                             PDExtendedGraphicsState extState = new PDExtendedGraphicsState();
                             extState.setBlendMode(BlendMode.MULTIPLY);
                             extState.setNonStrokingAlphaConstant(0.5f);
                             cs.setGraphicsStateParameters(extState);
-                            cs.transform(Matrix.getScaleInstance(0.08f, 0.08f));
-                            cs.drawImage(img, 100, 0);
+                            cs.transform(
+                                    Matrix.getScaleInstance(LEGACY_LOGO_SCALE, LEGACY_LOGO_SCALE));
+                            cs.drawImage(img, LEGACY_LOGO_X, 0);
                             cs.restoreGraphicsState();
+                        } else if (legacyAppearance) {
+                            // The legacy size comes from the image's own pixels, which is safe only
+                            // for the bundled mark. A larger image would be cut off by the form's
+                            // bounding box, so it is letterboxed into the box instead.
+                            SignatureLogoPlacement.draw(
+                                    cs,
+                                    img,
+                                    SignatureLogoPlacement.fitInside(bbox, aspectRatio(img)),
+                                    true);
                         } else {
                             SignatureLogoPosition position = logoPosition();
-                            // Sized by what the fields actually need, not by a fixed share: a
-                            // box with room to spare gives the logo more, and a cramped one
-                            // gives it less rather than costing the signer a line.
+                            // The split is pure geometry: the text sizes itself to whatever area
+                            // is left over, so there is nothing about the fields to consult here.
                             SignatureLogoPlacement.Placement placement =
-                                    SignatureLogoPlacement.place(
-                                            bbox,
-                                            aspectRatio(img),
-                                            position,
-                                            SignatureAppearanceLayout.keepsTheTextIntact(
-                                                    displayLines(signature, visibleAttributes),
-                                                    font,
-                                                    bbox.getWidth(),
-                                                    bbox.getHeight()));
+                                    SignatureLogoPlacement.place(bbox, aspectRatio(img), position);
                             SignatureLogoPlacement.draw(
                                     cs,
                                     img,
@@ -672,7 +734,7 @@ public class CertSignController {
                     if (legacyAppearance) {
                         drawLegacyText(cs, font, height, cert, signature);
                     } else {
-                        drawAttributeText(cs, font, textArea, cert, signature, visibleAttributes);
+                        drawAttributeText(cs, font, textArea, signature, visibleAttributes);
                     }
                 }
 
@@ -716,15 +778,13 @@ public class CertSignController {
         }
 
         /**
-         * Draws the selected certificate fields, scaled to whatever box the user drew. Falls back
-         * to the fields the legacy appearance showed when no selection was made, so asking only for
-         * a position still yields a sensible signature.
+         * The fields the visible signature shows, so the mark stamped on the other pages can render
+         * identical content without duplicating the selection rules.
+         *
+         * <p>Falls back to the fields the legacy appearance showed when no selection was made, so
+         * asking only for a position still yields a sensible signature.
          */
-        /**
-         * The label/value pairs the visible signature shows, so the mark stamped on other pages can
-         * render identical content without duplicating the selection rules.
-         */
-        public Map<String, String> displayLines(
+        public List<SignatureAppearanceLayout.Field> displayFields(
                 PDSignature signature, List<CertificateAttribute> visibleAttributes)
                 throws IOException {
             X509Certificate cert = (X509Certificate) getCertificateChain()[0];
@@ -743,43 +803,34 @@ public class CertSignController {
                             ? visibleAttributes
                             : DEFAULT_VISIBLE_ATTRIBUTES;
 
-            return attributeService.toDisplayLines(available, selected);
+            return attributeService.toDisplayFields(available, selected, attributeLabels);
         }
 
+        /** Draws the selected certificate fields, scaled to whatever box the user drew. */
         private void drawAttributeText(
                 PDPageContentStream cs,
                 PDFont font,
                 PDRectangle textArea,
-                X509Certificate cert,
                 PDSignature signature,
                 List<CertificateAttribute> visibleAttributes)
                 throws IOException {
-            Map<String, String> lines = displayLines(signature, visibleAttributes);
-            SignatureAppearanceLayout.Layout layout =
+            SignatureAppearanceLayout.draw(
+                    cs,
+                    font,
+                    textArea,
                     SignatureAppearanceLayout.fit(
-                            lines, font, textArea.getWidth(), textArea.getHeight());
-            if (layout.lines().isEmpty()) {
-                return;
-            }
-
-            cs.beginText();
-            cs.setFont(font, layout.fontSize());
-            cs.setNonStrokingColor(Color.black);
-            // Offsets are relative to the area left for the text, which is the whole box unless a
-            // logo took a strip of it. The first baseline is measured down from that area's top.
-            cs.newLineAtOffset(
-                    textArea.getLowerLeftX() + layout.padding(),
-                    textArea.getUpperRightY() - layout.firstBaselineFromTop());
-            cs.setLeading(layout.leading());
-            for (int i = 0; i < layout.lines().size(); i++) {
-                if (i > 0) {
-                    cs.newLine();
-                }
-                cs.showText(layout.lines().get(i));
-            }
-            cs.endText();
+                            displayFields(signature, visibleAttributes),
+                            font,
+                            textArea.getWidth(),
+                            textArea.getHeight()));
         }
     }
+
+    /** Scale the bundled mark has always been drawn at, before any transform of its own. */
+    private static final float LEGACY_LOGO_SCALE = 0.08f;
+
+    /** Where the bundled mark sits, in the scaled space the legacy transform sets up. */
+    private static final float LEGACY_LOGO_X = 100f;
 
     /** Fields shown when a box is requested without saying which fields to draw. */
     private static final List<CertificateAttribute> DEFAULT_VISIBLE_ATTRIBUTES =

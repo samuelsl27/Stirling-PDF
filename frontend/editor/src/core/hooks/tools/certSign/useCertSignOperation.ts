@@ -1,4 +1,6 @@
 import { useTranslation } from "react-i18next";
+import i18next from "i18next";
+import { CERTIFICATE_ATTRIBUTE_LABEL_KEYS } from "@app/constants/certSignConstants";
 import {
   useToolOperation,
   defineSingleFileTool,
@@ -87,6 +89,10 @@ const withSignatureAppearance = (
     }
     if (parameters.visibleAttributes.length > 0) {
       apiParams.visibleAttributes = parameters.visibleAttributes;
+      const labels = attributeLabels(parameters.visibleAttributes);
+      if (labels) {
+        apiParams.visibleAttributeLabels = labels;
+      }
     }
     // Only meaningful alongside a box: without one there is no shape to repeat.
     if (parameters.markAllPages && area) {
@@ -94,6 +100,29 @@ const withSignatureAppearance = (
     }
   }
   return apiParams;
+};
+
+/**
+ * The labels to stamp in front of each field, in the order the fields were chosen.
+ *
+ * <p>The signature is baked into the document, so it is stamped in the language the person signing
+ * is reading rather than the server's, and these are the same labels the field picker shows. The
+ * bare i18next instance is used rather than the app's own module: importing that from here would
+ * pull the whole bootstrap into anything that touches this file. Returns null when translations
+ * are not loaded, which leaves the backend to fall back to English.
+ */
+const attributeLabels = (
+  attributes: CertSignParameters["visibleAttributes"],
+): string[] | null => {
+  if (!i18next.isInitialized) {
+    return null;
+  }
+  const labels = attributes.map((attribute) => {
+    const key = CERTIFICATE_ATTRIBUTE_LABEL_KEYS[attribute];
+    const label = i18next.t(key);
+    return label === key ? "" : label;
+  });
+  return labels.some((label) => label !== "") ? labels : null;
 };
 
 // Select the keystore File uploads for the chosen certificate type. AUTO mode

@@ -3,11 +3,17 @@
 // (SwaggerDoc.json). Regenerate with: task frontend:tool-models
 // Tools that take only a file input have no parameters; their model is Record<string, never>.
 
+export interface AccessibilityReportRequest {
+  /**
+   * Profile to check against
+   */
+  profile?: "ua1" | "ua2";
+}
 export interface AddAttachmentRequest {
   /**
    * The image file to be overlaid onto the PDF.
    */
-  attachments: string[];
+  attachments: File[];
   /**
    * Convert the resulting PDF to PDF/A-3b format after adding attachments
    */
@@ -148,7 +154,7 @@ export interface AddStampRequest {
    * The rotation of the stamp in degrees
    */
   rotation?: number;
-  stampImage?: string;
+  stampImage?: File;
   /**
    * The stamp text
    */
@@ -187,7 +193,7 @@ export interface AddWatermarkRequest {
    * The rotation of the watermark in degrees
    */
   rotation?: number;
-  watermarkImage?: string;
+  watermarkImage?: File;
   /**
    * The watermark text
    */
@@ -200,6 +206,9 @@ export interface AddWatermarkRequest {
    * The width spacer between watermark elements
    */
   widthSpacer?: number;
+}
+export interface AiToolsClassifyAndLabelRequest {
+  reclassify?: boolean;
 }
 export interface AutoRotatePdfRequest {
   /**
@@ -525,9 +534,7 @@ export interface FlattenRequest {
    */
   renderDpi?: number;
 }
-export interface GeneralExtractBookmarksRequest {
-  file: string;
-}
+export type GeneralExtractBookmarksRequest = Record<string, never>;
 export type GeneralFile = Record<string, never>;
 export type GeneralPdfToSinglePageRequest = Record<string, never>;
 export type GeneralRemoveImagePdfRequest = Record<string, never>;
@@ -788,7 +795,7 @@ export interface OverlayImageRequest {
    * Whether to overlay the image onto every page of the PDF.
    */
   everyPage?: boolean;
-  imageFile: string;
+  imageFile: File;
   /**
    * The x-coordinate at which to place the top-left corner of the image.
    */
@@ -806,7 +813,7 @@ export interface OverlayPdfsRequest {
   /**
    * An array of PDF files to be used as overlays on the base PDF. The order in these files is applied based on the selected mode.
    */
-  overlayFiles: string[];
+  overlayFiles: File[];
   /**
    * The mode of overlaying: 'SequentialOverlay' for sequential application, 'InterleavedOverlay' for round-robin application, 'FixedRepeatOverlay' for fixed repetition based on provided counts
    */
@@ -888,11 +895,52 @@ export interface PdfToPdfARequest {
     | "pdfa-2b"
     | "pdfa-3"
     | "pdfa-3b"
+    | "pdfa-1a"
+    | "pdfa-2a"
+    | "pdfa-3a"
     | "pdfx";
+  /**
+   * Also declare PDF/UA accessibility alongside PDF/A. Only applies to the level A formats, and the claim is written only if it validates.
+   */
+  pdfUa?: boolean;
   /**
    * If true, the conversion will fail if the output is not perfectly compliant
    */
   strict?: boolean;
+}
+export interface PdfToPdfUaRequest {
+  /**
+   * Alternative descriptions for figures, as key=text pairs separated by newlines. Keys come from the accessibility-report endpoint's figuresNeedingDescription list, for example "0:12=Bar chart of quarterly revenue". Descriptions are never invented, so without these an illustrated document cannot claim conformance.
+   */
+  altText?: string;
+  /**
+   * Embed fonts the document references but does not carry. Required for conformance and needs Ghostscript.
+   */
+  embedFonts?: boolean;
+  /**
+   * What to do with an existing structure tree: keep it, rebuild it, or decide automatically
+   */
+  existingTags?: "auto" | "keep" | "rebuild";
+  /**
+   * How to treat images with no description. require-alt leaves them undescribed so the report asks for input; mark-decorative treats every image as decoration.
+   */
+  figurePolicy?: "require-alt" | "mark-decorative";
+  /**
+   * Document language as a BCP-47 tag, for example en-GB. Applied only when the document does not already declare one, unless overrideLanguage is set.
+   */
+  language?: string;
+  /**
+   * Replace the language the document already declares. Off by default, so a document is never relabelled into a language it is not written in.
+   */
+  overrideLanguage?: boolean;
+  /**
+   * PDF/UA conformance level to target
+   */
+  profile?: "ua1" | "ua2";
+  /**
+   * Document title, required by PDF/UA. Falls back to the first heading, then the filename.
+   */
+  title?: string;
 }
 export interface PdfToPresentationRequest {
   /**
@@ -974,6 +1022,10 @@ export interface ProcessPdfWithOcrRequest {
    * Remove images from the output PDF if set to true
    */
   removeImagesAfter?: boolean;
+  /**
+   * Auto-correct page orientation (90/180/270) using Tesseract OSD if set to true
+   */
+  rotatePages?: boolean;
   /**
    * Include OCR text in a sidecar text file if set to true
    */
@@ -1276,7 +1328,6 @@ export interface ScannerEffectRequest {
   yellowish?: boolean;
 }
 export interface SecurityCertSignSessionsRequest {
-  file: string;
   request?: WorkflowCreationRequest;
 }
 export interface WorkflowCreationRequest {
@@ -1291,8 +1342,8 @@ export interface WorkflowCreationRequest {
 }
 export interface SecurityCertSignValidateCertificateRequest {
   certType: string;
-  jksFile?: string;
-  p12File?: string;
+  jksFile?: File;
+  p12File?: File;
   password?: string;
 }
 export type SecurityGetInfoOnPdfRequest = Record<string, never>;
@@ -1302,7 +1353,7 @@ export interface SignPDFWithCertRequest {
    * The alias of the certificate to sign with. Required for WINDOWS_STORE and recommended for PKCS11 tokens holding multiple certificates.
    */
   alias?: string;
-  certFile?: string;
+  certFile?: File;
   /**
    * The type of the digital certificate. WINDOWS_STORE and PKCS11 are hardware-backed and only available in the desktop app.
    */
@@ -1314,16 +1365,25 @@ export interface SignPDFWithCertRequest {
     | "SERVER"
     | "WINDOWS_STORE"
     | "PKCS11";
-  jksFile?: string;
+  jksFile?: File;
   /**
    * The location where the PDF is signed
    */
   location?: string;
+  logoImage?: File;
+  /**
+   * Where the logo sits inside the signature box. BEHIND draws it under the text as a watermark; the others give it a strip of its own. Sending it without a signature box is allowed and applies the same layout to the default box.
+   */
+  logoPosition?: "LEFT" | "RIGHT" | "TOP" | "BOTTOM" | "BEHIND";
+  /**
+   * Repeat the signature's appearance on every page. A PDF signature has one widget on one page, so only the page given by pageNumber carries the actual signature; the other pages get a visual mark with the same content that is NOT a signature. Tell the user that, or the document looks signed in more places than it is.
+   */
+  markAllPages?: boolean;
   /**
    * The name of the signer
    */
   name?: string;
-  p12File?: string;
+  p12File?: File;
   /**
    * The page number where the signature should be visible. This is required if showSignature is set to true
    */
@@ -1340,7 +1400,7 @@ export interface SignPDFWithCertRequest {
    * Optional PKCS#11 slot index. When omitted the first slot with a token is used.
    */
   pkcs11Slot?: number;
-  privateKeyFile?: string;
+  privateKeyFile?: File;
   /**
    * The reason for signing the PDF
    */
@@ -1350,13 +1410,17 @@ export interface SignPDFWithCertRequest {
    */
   showLogo?: boolean;
   /**
-   * Where the logo sits inside the signature box. BEHIND draws it under the text as a watermark; the others give it a strip of its own.
-   */
-  logoPosition?: "LEFT" | "RIGHT" | "TOP" | "BOTTOM" | "BEHIND";
-  /**
    * Whether to visually show the signature in the PDF file
    */
   showSignature?: boolean;
+  /**
+   * Height of the signature box in PDF points.
+   */
+  signatureHeight?: number;
+  /**
+   * Width of the signature box in PDF points.
+   */
+  signatureWidth?: number;
   /**
    * Distance in PDF points from the left edge of the page to the left edge of the signature box. Omit to keep the legacy bottom-left placement.
    */
@@ -1366,20 +1430,12 @@ export interface SignPDFWithCertRequest {
    */
   signatureY?: number;
   /**
-   * Width of the signature box in PDF points.
+   * Labels to draw in front of each of visibleAttributes, in the same order. The application holds its own translations, and the signature is baked into the document, so the caller says what the reader should see. Omit to get English.
    */
-  signatureWidth?: number;
+  visibleAttributeLabels?: string[];
   /**
-   * Height of the signature box in PDF points.
+   * Certificate fields to draw inside the signature box, in the order given. Omit to keep the legacy content (signer name, date and reason). Fields the certificate does not carry are skipped rather than drawn blank.
    */
-  signatureHeight?: number;
-  /**
-   * Certificate fields to draw inside the signature box, in the order given. Omit to keep the legacy content. Fields the certificate does not carry are skipped rather than drawn blank.
-   */
-  /**
-   * Repeat the signature's appearance on every page. Only the page given by pageNumber carries the actual signature; the other pages get a visual mark that is NOT a signature.
-   */
-  markAllPages?: boolean;
   visibleAttributes?: (
     | "SUBJECT_COMMON_NAME"
     | "SUBJECT_ORGANISATION"
@@ -1398,7 +1454,7 @@ export interface SignPDFWithCertRequest {
   )[];
 }
 export interface SignatureValidationRequest {
-  certFile?: string;
+  certFile?: File;
 }
 export interface SplitPagesRequest {
   /**
@@ -1484,6 +1540,7 @@ export interface UrlToPdfRequest {
 
 /** Endpoint path for a generated tool operation (the operation identity across languages). */
 export type ToolEndpoint =
+  | "/api/v1/ai/tools/classify-and-label"
   | "/api/v1/convert/cbr/pdf"
   | "/api/v1/convert/cbz/pdf"
   | "/api/v1/convert/ebook/pdf"
@@ -1504,6 +1561,7 @@ export type ToolEndpoint =
   | "/api/v1/convert/pdf/text"
   | "/api/v1/convert/pdf/text-editor"
   | "/api/v1/convert/pdf/text-editor/metadata"
+  | "/api/v1/convert/pdf/ua"
   | "/api/v1/convert/pdf/vector"
   | "/api/v1/convert/pdf/word"
   | "/api/v1/convert/pdf/xlsx"
@@ -1565,6 +1623,7 @@ export type ToolEndpoint =
   | "/api/v1/misc/show-javascript"
   | "/api/v1/misc/unlock-pdf-forms"
   | "/api/v1/misc/update-metadata"
+  | "/api/v1/security/accessibility-report"
   | "/api/v1/security/add-password"
   | "/api/v1/security/add-watermark"
   | "/api/v1/security/auto-redact"
@@ -1584,6 +1643,7 @@ export type ToolEndpoint =
 
 /** Backend request-parameter model for each tool endpoint. */
 export interface ToolApiParams {
+  "/api/v1/ai/tools/classify-and-label": AiToolsClassifyAndLabelRequest;
   "/api/v1/convert/cbr/pdf": ConvertCbrToPdfRequest;
   "/api/v1/convert/cbz/pdf": ConvertCbzToPdfRequest;
   "/api/v1/convert/ebook/pdf": ConvertEbookToPdfRequest;
@@ -1604,6 +1664,7 @@ export interface ToolApiParams {
   "/api/v1/convert/pdf/text": PdfToTextOrRTFRequest;
   "/api/v1/convert/pdf/text-editor": ConvertPdfTextEditorRequest;
   "/api/v1/convert/pdf/text-editor/metadata": ConvertPdfTextEditorMetadataRequest;
+  "/api/v1/convert/pdf/ua": PdfToPdfUaRequest;
   "/api/v1/convert/pdf/vector": PdfVectorExportRequest;
   "/api/v1/convert/pdf/word": PdfToWordRequest;
   "/api/v1/convert/pdf/xlsx": PDFWithPageNums;
@@ -1665,6 +1726,7 @@ export interface ToolApiParams {
   "/api/v1/misc/show-javascript": MiscShowJavascriptRequest;
   "/api/v1/misc/unlock-pdf-forms": MiscUnlockPdfFormsRequest;
   "/api/v1/misc/update-metadata": MetadataRequest;
+  "/api/v1/security/accessibility-report": AccessibilityReportRequest;
   "/api/v1/security/add-password": AddPasswordRequest;
   "/api/v1/security/add-watermark": AddWatermarkRequest;
   "/api/v1/security/auto-redact": RedactPdfRequest;
@@ -1685,6 +1747,7 @@ export interface ToolApiParams {
 
 /** Every generated tool endpoint, for iteration. */
 export const TOOL_ENDPOINTS = [
+  "/api/v1/ai/tools/classify-and-label",
   "/api/v1/convert/cbr/pdf",
   "/api/v1/convert/cbz/pdf",
   "/api/v1/convert/ebook/pdf",
@@ -1705,6 +1768,7 @@ export const TOOL_ENDPOINTS = [
   "/api/v1/convert/pdf/text",
   "/api/v1/convert/pdf/text-editor",
   "/api/v1/convert/pdf/text-editor/metadata",
+  "/api/v1/convert/pdf/ua",
   "/api/v1/convert/pdf/vector",
   "/api/v1/convert/pdf/word",
   "/api/v1/convert/pdf/xlsx",
@@ -1766,6 +1830,7 @@ export const TOOL_ENDPOINTS = [
   "/api/v1/misc/show-javascript",
   "/api/v1/misc/unlock-pdf-forms",
   "/api/v1/misc/update-metadata",
+  "/api/v1/security/accessibility-report",
   "/api/v1/security/add-password",
   "/api/v1/security/add-watermark",
   "/api/v1/security/auto-redact",
@@ -1783,6 +1848,24 @@ export const TOOL_ENDPOINTS = [
   "/api/v1/security/validate-signature",
   "/api/v1/security/verify-pdf",
 ] as const satisfies readonly ToolEndpoint[];
+
+/** The supporting-file parameters each endpoint accepts beyond its primary fileInput, by name. */
+export const TOOL_FILE_FIELDS = {
+  "/api/v1/general/overlay-pdfs": ["overlayFiles"],
+  "/api/v1/misc/add-attachments": ["attachments"],
+  "/api/v1/misc/add-image": ["imageFile"],
+  "/api/v1/misc/add-stamp": ["stampImage"],
+  "/api/v1/security/add-watermark": ["watermarkImage"],
+  "/api/v1/security/cert-sign": [
+    "privateKeyFile",
+    "certFile",
+    "p12File",
+    "jksFile",
+    "logoImage",
+  ],
+  "/api/v1/security/cert-sign/validate-certificate": ["p12File", "jksFile"],
+  "/api/v1/security/validate-signature": ["certFile"],
+} as const satisfies Partial<Record<ToolEndpoint, readonly string[]>>;
 
 /** Union of every generated tool request model. */
 export type ToolApiRequest = ToolApiParams[ToolEndpoint];
