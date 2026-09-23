@@ -2619,7 +2619,7 @@ title = "Firmas invisibles"
 bullet1 = "PNG o JPEG; la imagen conserva sus proporciones, nunca se deforma"
 bullet2 = "Colócalo junto al texto, encima, debajo o detrás"
 bullet3 = "Detrás lo dibuja como marca de agua atenuada, para que el texto siga legible encima"
-bullet4 = "El texto conserva su parte del recuadro, por ancho que sea el logotipo"
+bullet4 = "Ocupa el mayor tamaño que permite el recuadro, y el texto llena lo que queda"
 text = "Sube el logotipo de tu organización para mostrarlo dentro del recuadro de la firma y elige dónde se coloca. Si lo dejas vacío se usa la marca incluida de Stirling PDF."
 title = "Añadir tu logotipo"
 
@@ -2633,7 +2633,7 @@ title = "Mostrarla en todas las páginas"
 [certSign.appearance.tooltip.placement]
 bullet1 = "Arrastra sobre la página, o haz clic en una esquina y luego en la opuesta"
 bullet2 = "La página sobre la que dibujes será la que se firme"
-bullet3 = "El texto se reduce para caber, así que nunca se sale del recuadro"
+bullet3 = "El texto crece o se reduce hasta llenar el recuadro, así que no se desperdicia espacio"
 bullet4 = "Si no dibujas nada, la firma irá a su sitio de siempre"
 text = "Dibuja un recuadro directamente sobre el documento para indicar dónde debe aparecer la firma. Útil cuando el formulario ya trae una línea o un cuadro impreso para firmar."
 title = "Dónde colocar la firma"
@@ -2836,6 +2836,7 @@ upload = "Subir"
 
 [certSign.collab.signRequest.steps]
 back = "Atrás"
+cancel = "Cancelar"
 cancelPlacement = "Cancelar colocación"
 certificate = "Certificado"
 clickMultipleTimes = "Haz clic en el PDF varias veces para colocar firmas. Arrastra cualquier firma para moverla o redimensionarla."
@@ -2874,7 +2875,11 @@ pkcs11 = "Token USB"
 windowsStore = "Almacén de certificados de Windows"
 
 [certSign.hardware]
+browse = "Elegir certificado…"
+cancel = "Cancelar"
 certificate = "Certificado"
+change = "Cambiar certificado"
+current = "(en uso)"
 customLibrary = "Ruta del controlador personalizada…"
 driver = "Controlador PKCS#11"
 driverPath = "Ruta de la biblioteca del controlador"
@@ -2883,18 +2888,29 @@ expired = "caducado"
 expires = "caduca"
 listCerts = "Listar certificados"
 loading = "Leyendo certificados…"
+modalTitle = "Elegir un certificado de firma"
 noCerts = "No se encontraron certificados de firma"
 noDriver = "No se detectó ningún controlador PKCS#11. Instale el controlador de su token (p. ej., OpenSC), luego vuelva a abrir esto - o introduzca manualmente la ruta del controlador a continuación."
+noneChosen = "Aún no se ha elegido ningún certificado"
 notYetValid = "aún no válido"
 pin = "PIN del token"
 pkcs11Hint = "Seleccione el controlador PKCS#11 de su token, introduzca el PIN y luego liste los certificados del token."
 pkcs11LoadError = "No se pudieron leer los certificados del token. Compruebe el PIN y el controlador."
 refresh = "Actualizar"
+search = "Buscar por nombre, emisor o número de serie"
 selectCert = "Seleccionar certificado"
 selectDriver = "Seleccionar controlador"
 slot = "Ranura (opcional)"
+valid = "Válido"
 windowsHint = "Elija un certificado de su almacén de certificados de Windows. La firma utiliza la clave de su tarjeta/token - Windows solicitará el PIN."
 windowsLoadError = "No se pudo leer el almacén de certificados de Windows"
+
+[certSign.hardware.columns]
+certificate = "Certificado"
+issuer = "Emitido por"
+source = "Tipo"
+status = "Estado"
+validUntil = "Válido hasta"
 
 [certSign.logo]
 choose = "Elegir una imagen de logotipo (PNG o JPEG)"
@@ -2919,7 +2935,7 @@ coordinates = "x {{x}}, y {{y}} · {{width}} × {{height}} pt"
 default = "Sin colocar: la firma irá donde siempre, en la página indicada arriba."
 dragging = "Arrastra un recuadro sobre la página donde deba ir la firma."
 draw = "Dibujar el recuadro sobre el documento"
-hint = "Arrastra sobre la página para colocar la firma. El texto se ajusta al recuadro que dibujes."
+hint = "Arrastra sobre la página para colocar la firma. El texto se dimensiona para llenar el recuadro que dibujes."
 noFile = "Selecciona un PDF para elegir dónde va la firma."
 placed = "Colocada en la página {{page}} · {{width}} × {{height}} pt"
 reset = "Usar la posición predeterminada"
@@ -5092,6 +5108,28 @@ restore = "Restaurar"
 [formFill.sidebar]
 close = "Cerrar barra lateral"
 
+[formFill.xfa]
+dynamicDescription = "Este formulario está hecho enteramente en XFA y no tiene campos que otros visores puedan rellenar. Solo Adobe Acrobat o Reader pueden rellenarlo."
+dynamicTitle = "Formulario XFA dinámico"
+hybridDescription = "Adobe Acrobat muestra los datos XFA de este formulario en lugar de los campos que rellenas aquí."
+hybridTitle = "Formulario híbrido XFA: los datos de Acrobat pueden diferir"
+modeLabel = "Qué hace el guardado con el XFA"
+structureDescription = "Adobe Acrobat muestra la versión XFA de este formulario, que no puede seguir los cambios en sus campos."
+syncFailed = "No se pudieron actualizar los datos XFA, así que Acrobat puede seguir mostrando los valores antiguos en el PDF guardado."
+
+[formFill.xfa.mode]
+none = "No tocar"
+noneDescription = "Los datos XFA se quedan como están. Acrobat seguirá mostrando los valores antiguos."
+strip = "Eliminar XFA"
+stripDescription = "Todos los visores, Acrobat incluido, usan los campos normales. Los scripts y las validaciones de LiveCycle del formulario dejan de funcionar."
+sync = "Sincronizar XFA (recomendado)"
+syncDescription = "Copia los valores en los datos XFA, para que Acrobat muestre lo mismo que cualquier otro visor."
+
+[formFill.xfa.structure]
+noneDescription = "Acrobat seguirá mostrando el formulario como era antes de estos cambios."
+remove = "Eliminar XFA (recomendado)"
+removeDescription = "Su plantilla no puede describir los campos añadidos, modificados o eliminados, así que hay que quitarla para que Acrobat muestre el formulario nuevo."
+
 [getPdfInfo]
 downloadJson = "Descargar JSON"
 downloads = "Descargas"
@@ -5981,6 +6019,7 @@ failed = "La operación de OCR falló"
 [ocr.languagePicker]
 additionalLanguages = "¿Busca idiomas adicionales?"
 loading = "Cargando idiomas disponibles..."
+manageLanguages = "Añadir idiomas →"
 viewSetupGuide = "Ver guía de configuración →"
 
 [ocr.operation]
@@ -5988,6 +6027,19 @@ submit = "Procesar OCR y Revisar"
 
 [ocr.results]
 title = "Resultados de OCR"
+
+[ocr.runtime]
+apply = "Aplicar"
+applyWithSize = "Aplicar ({{size}} de descarga)"
+catalogueUnreachable = "No se pudo acceder a la lista de componentes de OCR instalables. Lo que ya está instalado sigue funcionando."
+engineFailed = "No se pudo instalar el motor de OCR."
+engineMissing = "El reconocimiento de texto aún no está instalado."
+engineUnavailable = "No hay ningún motor de OCR para esta plataforma"
+failed = "Algo ha fallado"
+installEngine = "Instalar OCR ({{size}})"
+languages = "Idiomas"
+restartRequired = "Reinicia Stirling-PDF para terminar de activar el OCR."
+title = "Configuración del OCR"
 
 [ocr.settings]
 title = "Configuración"
@@ -11416,6 +11468,10 @@ usageDescription = "Cómo se usa el servidor: operaciones, volumen y tendencias 
 
 [settings.monitoring]
 title = "Supervisión"
+
+[settings.ocr]
+description = "El reconocimiento de texto se descarga cuando lo necesitas, así el instalador ocupa poco. Puedes añadir o quitar idiomas cuando quieras."
+title = "Reconocimiento de texto"
 
 [settings.planBilling]
 currentPlan = "Plan actual"
