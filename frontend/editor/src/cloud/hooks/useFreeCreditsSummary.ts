@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useWallet, type UseWalletOptions } from "@app/hooks/useWallet";
+import { useWallet } from "@app/hooks/useWallet";
+import { useAuth } from "@app/auth/UseSession";
 import {
   readCachedCredits,
   writeCachedCredits,
@@ -23,18 +24,16 @@ function toCredits(
  * Cloud builds read the free grant off the live wallet — the same snapshot the
  * Plan page's free meter renders, so the sidebar and Plan can't disagree.
  *
- * Seeded from the last figures this browser saw, so the row is right at first
- * paint and stays put while the wallet refetches underneath. Only a browser
- * that has never loaded a wallet has nothing to show, and that one time the row
- * animates in. The seed is read once, at first render: later reads would fight
- * the live value, and the whole point is that the row stops moving.
+ * Cached figures are read once and shown only after authentication resolves.
+ * Live wallet data takes precedence. Guest sessions discard the seed as well
+ * as the stored cache so signup cannot revive a previous account's figures.
  */
-export function useFreeCreditsSummary(
-  options?: UseWalletOptions,
-): NavFooterCredits | null {
-  const enabled = options?.enabled ?? true;
-  const { wallet } = useWallet({ enabled });
-  const [seed] = useState(readCachedCredits);
+export function useFreeCreditsSummary(): NavFooterCredits | null {
+  const { isAnonymous, loading } = useAuth();
+  const { wallet } = useWallet(!loading && !isAnonymous);
+  const [seed, setSeed] = useState(() =>
+    isAnonymous ? null : readCachedCredits(),
+  );
 
   const live = wallet
     ? toCredits(wallet.status, wallet.freeRemaining, wallet.freeAllowance)
@@ -43,13 +42,13 @@ export function useFreeCreditsSummary(
   // useWallet reuses the snapshot reference when nothing changed, so keying on
   // it writes only on a real change, not on every render.
   useEffect(() => {
-    if (enabled && live !== undefined) writeCachedCredits(live);
+    if (isAnonymous) {
+      setSeed(null);
+      writeCachedCredits(null);
+    } else if (live !== undefined) writeCachedCredits(live);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, wallet]);
+  }, [wallet, isAnonymous]);
 
-  // Disabled gates the seed as well as the fetch, the way the portal gates both on linkage: the
-  // cache outlives the build that wrote it, so a desktop that once ran against the cloud would
-  // otherwise keep showing that session's figures with nothing left to refresh them.
-  if (!enabled) return null;
+  if (loading || isAnonymous) return null;
   return (live !== undefined ? live : seed) ?? null;
 }

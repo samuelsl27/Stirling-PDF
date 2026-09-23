@@ -1,49 +1,79 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-const { getCurrentModeMock, subscribeToModeChangesMock } = vi.hoisted(() => ({
-  getCurrentModeMock: vi.fn(),
-  subscribeToModeChangesMock: vi.fn(),
-}));
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useNotificationsAvailable } from "@app/components/notifications/useNotificationsAvailable";
+import {
+  connectionModeService,
+  type ConnectionConfig,
+  type ConnectionMode,
+} from "@app/services/connectionModeService";
 
 vi.mock("@app/services/connectionModeService", () => ({
   connectionModeService: {
-    getCurrentMode: getCurrentModeMock,
-    subscribeToModeChanges: subscribeToModeChangesMock,
+    getCurrentMode: vi.fn(),
+    subscribeToModeChanges: vi.fn(),
   },
 }));
 
-import { useNotificationsAvailable } from "@app/components/notifications/useNotificationsAvailable";
+describe("desktop notification availability", () => {
+  let notify: (cfg: ConnectionConfig) => void;
+  const unsubscribe = vi.fn();
 
-// Resolved through @app/*, which is how NotificationBell reaches it: desktop must win over the
-// proprietary answer, or this is the proprietary hook and the assertions below pass for nothing.
-describe("useNotificationsAvailable (desktop)", () => {
   beforeEach(() => {
-    getCurrentModeMock.mockReset();
-    subscribeToModeChangesMock.mockReset();
-    subscribeToModeChangesMock.mockReturnValue(() => {});
-  });
-  afterEach(() => vi.clearAllMocks());
-
-  it("says no in local mode: the bundled backend serves no notification route", async () => {
-    getCurrentModeMock.mockResolvedValue("local");
-    const { result } = renderHook(() => useNotificationsAvailable());
-    await act(async () => {});
-    expect(result.current).toBe(false);
+    vi.clearAllMocks();
+    vi.mocked(connectionModeService.subscribeToModeChanges).mockImplementation(
+      (listener) => {
+        notify = listener;
+        return unsubscribe;
+      },
+    );
   });
 
-  it("says no until the mode is known, so a cold start polls nothing", () => {
-    getCurrentModeMock.mockReturnValue(new Promise<never>(() => {}));
-    const { result } = renderHook(() => useNotificationsAvailable());
-    expect(result.current).toBe(false);
-  });
-
-  it.each(["saas", "selfhosted"])(
-    "says yes against a %s server, which does serve them",
+  it.each(["local", "saas", "selfhosted"] as const)(
+    "waits for the mode, then enables notifications only for a server (%s)",
     async (mode) => {
-      getCurrentModeMock.mockResolvedValue(mode);
-      const { result } = renderHook(() => useNotificationsAvailable());
-      await waitFor(() => expect(result.current).toBe(true));
+      vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(mode);
+      const { result, unmount } = renderHook(() => useNotificationsAvailable());
+      expect(result.current).toBe(false);
+      await act(async () => {});
+      expect(result.current).toBe(mode !== "local");
+      unmount();
+      expect(unsubscribe).toHaveBeenCalledOnce();
     },
   );
+
+  it("a late initial mode cannot restart polling after switching to local", async () => {
+    let resolveMode: (mode: ConnectionMode) => void = () => {};
+    vi.mocked(connectionModeService.getCurrentMode).mockReturnValue(
+      new Promise((resolve) => {
+        resolveMode = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useNotificationsAvailable());
+    await act(async () => {
+      notify({
+        mode: "local",
+        server_config: null,
+        lock_connection_mode: false,
+      });
+      resolveMode("saas");
+    });
+    expect(result.current).toBe(false);
+
+    await act(async () => {
+      notify({
+        mode: "saas",
+        server_config: null,
+        lock_connection_mode: false,
+      });
+    });
+    expect(result.current).toBe(true);
+    await act(async () => {
+      notify({
+        mode: "local",
+        server_config: null,
+        lock_connection_mode: false,
+      });
+    });
+    expect(result.current).toBe(false);
+  });
 });

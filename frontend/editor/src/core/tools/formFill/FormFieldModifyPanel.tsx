@@ -19,11 +19,7 @@ import {
 import { Button } from "@app/ui/Button";
 import { ActionIcon } from "@app/ui/ActionIcon";
 import { useTranslation } from "react-i18next";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineRounded";
-import RestoreIcon from "@mui/icons-material/Restore";
-import MyLocationIcon from "@mui/icons-material/MyLocation";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import { Icon } from "@app/ui/Icon";
 import { useViewer } from "@app/contexts/ViewerContext";
 import { useFormFill } from "@app/tools/formFill/FormFillContext";
 import type {
@@ -40,6 +36,7 @@ import {
 } from "@app/tools/formFill/FormFieldPropertyEditor";
 import { isTextEntryTarget } from "@app/tools/formFill/usePageScale";
 import { SkippedEditsAlert } from "@app/tools/formFill/SkippedEditsAlert";
+import { XfaNotice } from "@app/tools/formFill/XfaNotice";
 import { useFormCommit } from "@app/tools/formFill/useFormCommit";
 import styles from "@app/tools/formFill/FormFill.module.css";
 
@@ -197,7 +194,7 @@ export function FormFieldModifyPanel({
 
         {error && (
           <Alert
-            icon={<WarningAmberIcon sx={{ fontSize: 16 }} />}
+            icon={<Icon name="triangle-alert" size={16} />}
             color="red"
             variant="light"
             p="xs"
@@ -208,6 +205,7 @@ export function FormFieldModifyPanel({
         )}
 
         <SkippedEditsAlert />
+        <XfaNotice file={currentFile} variant="panel" scope="structure" />
 
         {state.fields.length === 0 && !state.loading && (
           <Text size="xs" c="dimmed" ta="center" py="md">
@@ -232,9 +230,10 @@ export function FormFieldModifyPanel({
                 onClick={() => togglePage(pageIdx)}
                 data-testid={`form-page-header-${pageIdx}`}
               >
-                <ExpandMoreIcon
-                  sx={{
-                    fontSize: 16,
+                <Icon
+                  name="chevron-down"
+                  size={16}
+                  style={{
                     transform: collapsedPages.has(pageIdx)
                       ? "rotate(-90deg)"
                       : undefined,
@@ -261,7 +260,7 @@ export function FormFieldModifyPanel({
                       scrollActions.scrollToPage(pageIdx + 1);
                     }}
                   >
-                    <MyLocationIcon sx={{ fontSize: 15 }} />
+                    <Icon name="locate-fixed" size={15} />
                   </ActionIcon>
                 </Tooltip>
               </div>
@@ -303,7 +302,10 @@ export function FormFieldModifyPanel({
                               display: "flex",
                             }}
                           >
-                            {FIELD_TYPE_ICON[field.type]}
+                            <Icon
+                              name={FIELD_TYPE_ICON[field.type]}
+                              size={16}
+                            />
                           </span>
                           <Text
                             size="xs"
@@ -337,9 +339,9 @@ export function FormFieldModifyPanel({
                             data-testid={`form-modify-delete-${field.name}`}
                           >
                             {deleted ? (
-                              <RestoreIcon sx={{ fontSize: 16 }} />
+                              <Icon name="rotate-ccw-clock" size={16} />
                             ) : (
-                              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                              <Icon name="trash" size={16} />
                             )}
                           </ActionIcon>
                         </Tooltip>

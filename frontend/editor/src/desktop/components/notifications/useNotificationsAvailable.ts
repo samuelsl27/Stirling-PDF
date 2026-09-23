@@ -1,14 +1,24 @@
-import { useConfirmedRemoteMode } from "@app/hooks/useConfirmedRemoteMode";
+import { useEffect, useState } from "react";
+import { connectionModeService } from "@app/services/connectionModeService";
 
-/**
- * Desktop reads notifications off whichever Stirling server it is connected to, and has none of
- * its own: the backend in the installer is built without {@code :proprietary}, so
- * {@code /api/v1/notifications} is not a route it serves.
- *
- * Without this seam the desktop build inherits the proprietary answer — an unconditional yes —
- * because {@code @app/*} resolves desktop → cloud → proprietary → core. The bell then mounts on a
- * local install and polls a route that 404s, which is what the core stub exists to prevent.
- */
+/** The bundled backend has no notification API; wait for the mode before polling. */
 export function useNotificationsAvailable(): boolean {
-  return useConfirmedRemoteMode();
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    void connectionModeService.getCurrentMode().then((mode) => {
+      if (current) setAvailable(mode !== "local");
+    });
+    const unsubscribe = connectionModeService.subscribeToModeChanges((cfg) => {
+      current = false;
+      setAvailable(cfg.mode !== "local");
+    });
+    return () => {
+      current = false;
+      unsubscribe();
+    };
+  }, []);
+
+  return available;
 }

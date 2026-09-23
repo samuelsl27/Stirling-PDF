@@ -12,15 +12,12 @@ import {
 import { Button } from "@app/ui/Button";
 import { ActionIcon } from "@app/ui/ActionIcon";
 import { useTranslation } from "react-i18next";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineRounded";
-import MyLocationIcon from "@mui/icons-material/MyLocation";
+import { Icon } from "@app/ui/Icon";
 import { useViewer } from "@app/contexts/ViewerContext";
 import {
   pendingSelectionName,
   pendingIdFrom,
 } from "@app/tools/formFill/pendingSelection";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { useFormFill } from "@app/tools/formFill/FormFillContext";
 import {
   CREATABLE_FIELD_TYPES,
@@ -33,6 +30,7 @@ import {
 } from "@app/tools/formFill/fieldMeta";
 import { FormFieldPropertyEditor } from "@app/tools/formFill/FormFieldPropertyEditor";
 import { SkippedEditsAlert } from "@app/tools/formFill/SkippedEditsAlert";
+import { XfaNotice } from "@app/tools/formFill/XfaNotice";
 import { useFormCommit } from "@app/tools/formFill/useFormCommit";
 import styles from "@app/tools/formFill/FormFill.module.css";
 
@@ -127,7 +125,7 @@ export function FormFieldCreatePanel({
                 key={type}
                 size="sm"
                 variant={armed ? "primary" : "secondary"}
-                leftSection={FIELD_TYPE_ICON[type]}
+                leftSection={<Icon name={FIELD_TYPE_ICON[type]} size={16} />}
                 onClick={() => setCreationType(armed ? null : type)}
                 data-testid={`form-create-type-${type}`}
               >
@@ -151,7 +149,7 @@ export function FormFieldCreatePanel({
 
         {error && (
           <Alert
-            icon={<WarningAmberIcon sx={{ fontSize: 16 }} />}
+            icon={<Icon name="triangle-alert" size={16} />}
             color="red"
             variant="light"
             p="xs"
@@ -162,6 +160,7 @@ export function FormFieldCreatePanel({
         )}
 
         <SkippedEditsAlert />
+        <XfaNotice file={currentFile} variant="panel" scope="structure" />
       </div>
 
       {/* Content stacks naturally; ToolPanel's own ScrollArea does the scrolling. */}
@@ -195,7 +194,7 @@ export function FormFieldCreatePanel({
                           display: "flex",
                         }}
                       >
-                        {FIELD_TYPE_ICON[pf.type]}
+                        <Icon name={FIELD_TYPE_ICON[pf.type]} size={16} />
                       </span>
                       <Text size="xs" truncate>
                         {pf.name}
@@ -227,7 +226,7 @@ export function FormFieldCreatePanel({
                           }}
                           data-testid={`form-pending-goto-${pf.id}`}
                         >
-                          <MyLocationIcon sx={{ fontSize: 16 }} />
+                          <Icon name="locate-fixed" size={16} />
                         </ActionIcon>
                       </Tooltip>
                       <Tooltip
@@ -248,7 +247,7 @@ export function FormFieldCreatePanel({
                           }}
                           data-testid={`form-pending-remove-${pf.id}`}
                         >
-                          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                          <Icon name="trash" size={16} />
                         </ActionIcon>
                       </Tooltip>
                     </Group>
@@ -302,7 +301,7 @@ export function FormFieldCreatePanel({
             onPointerLeave={() => setPreviewing(false)}
             onPointerCancel={() => setPreviewing(false)}
             onBlur={() => setPreviewing(false)}
-            leftSection={<VisibilityOutlinedIcon fontSize="small" />}
+            leftSection={<Icon name="eye" size={20} />}
           >
             {t("formFill.create.preview", "Hold to preview")}
           </Button>

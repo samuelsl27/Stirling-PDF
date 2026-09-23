@@ -1,12 +1,23 @@
-import { type SidebarProcessingSlotProps } from "@core/components/shared/SidebarProcessingSlot";
-export { type SidebarProcessingSlotProps };
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { usePoliciesEnabled } from "@app/components/policies/usePoliciesEnabled";
+import { ClassificationDemoModal } from "@app/components/onboarding/classificationDemo/ClassificationDemoModal";
+import { Button } from "@app/ui/Button";
 
-/**
- * Desktop: no Downloads offer. The proprietary wizard asks the server for its Downloads folder,
- * but the bundled backend is built without the proprietary controller and the cloud does not
- * serve it either, so every retry raised a "Cloud Processing Failed" toast. The server could
- * not see this machine's Downloads anyway; #7964 moves the lookup onto the OS.
- */
-export function SidebarProcessingSlot(_props: SidebarProcessingSlotProps) {
-  return null;
+/** Reopens the desktop Downloads offer after the first-run modal was dismissed. */
+export function SidebarProcessingSlot() {
+  const { t } = useTranslation();
+  const enabled = usePoliciesEnabled();
+  const [open, setOpen] = useState(false);
+  if (!enabled) return null;
+  return (
+    <>
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+        {t("classificationDemo.offer.cta", "Process my Downloads folder")}
+      </Button>
+      {open && (
+        <ClassificationDemoModal opened onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
 }
