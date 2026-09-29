@@ -218,13 +218,15 @@
     <!--
       Run the provisioner when ANY of STIRLING_SERVER_URL, STIRLING_LOGIN_AGREEMENT, or
       STIRLING_UPDATE_MODE is set. The provisioner is a no-op if all values end up empty,
-      so passing none is safe.
+      so passing none is safe. Never while uninstalling: it runs from the install
+      directory after RemoveFiles, and this build's STIRLING_UPDATE_MODE default is set
+      during an uninstall too, so the removal would fail with error 1721.
     -->
     <InstallExecuteSequence>
-      <Custom Action="SetWriteProvisioningFilePerUser" After="InstallFiles">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (NOT ALLUSERS OR ALLUSERS=0)</Custom>
-      <Custom Action="WriteProvisioningFilePerUser" After="SetWriteProvisioningFilePerUser">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (NOT ALLUSERS OR ALLUSERS=0)</Custom>
-      <Custom Action="SetWriteProvisioningFileAllUsers" After="InstallFiles">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (ALLUSERS=1 OR ALLUSERS=2)</Custom>
-      <Custom Action="WriteProvisioningFileAllUsers" After="SetWriteProvisioningFileAllUsers">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (ALLUSERS=1 OR ALLUSERS=2)</Custom>
+      <Custom Action="SetWriteProvisioningFilePerUser" After="InstallFiles">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (NOT ALLUSERS OR ALLUSERS=0) AND NOT REMOVE</Custom>
+      <Custom Action="WriteProvisioningFilePerUser" After="SetWriteProvisioningFilePerUser">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (NOT ALLUSERS OR ALLUSERS=0) AND NOT REMOVE</Custom>
+      <Custom Action="SetWriteProvisioningFileAllUsers" After="InstallFiles">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (ALLUSERS=1 OR ALLUSERS=2) AND NOT REMOVE</Custom>
+      <Custom Action="WriteProvisioningFileAllUsers" After="SetWriteProvisioningFileAllUsers">(STIRLING_SERVER_URL &lt;&gt; &quot;&quot; OR STIRLING_LOGIN_AGREEMENT &lt;&gt; &quot;&quot; OR STIRLING_UPDATE_MODE &lt;&gt; &quot;&quot;) AND (ALLUSERS=1 OR ALLUSERS=2) AND NOT REMOVE</Custom>
 
       <!-- Only when asked for, and never while uninstalling. -->
       <Custom Action="SetInstallOcrRuntime" After="InstallFiles">STIRLING_OCR=&quot;1&quot; AND NOT REMOVE</Custom>
