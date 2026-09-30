@@ -30,6 +30,9 @@ export interface StoredStirlingFileRecord extends BaseFileMetadata {
   // Blob since the large-file OOM fix (stored by reference, no JS-side copy);
   // ArrayBuffer records predate it and are still readable.
   data: ArrayBuffer | Blob;
+  // Counts replacements of `data`, so a write prepared from an older read can tell
+  // the bytes it copied are no longer the ones stored. Absent until the first one.
+  bodyRevision?: number;
   fileId: FileId; // Matches runtime StirlingFile.fileId exactly
   quickKey: string; // Matches runtime StirlingFile.quickKey exactly
   thumbnail?: string;
@@ -155,9 +158,12 @@ export function shouldBumpThumbnailTtl(
 
 /** WebKit loses backing stores for blobs it accepted, and only a real read shows
  *  it. One byte is enough: what fails is opening the store, not the length. */
-async function blobReadFailure(data: Blob): Promise<unknown> {
+async function blobReadFailure(
+  data: Blob,
+  signal?: AbortSignal,
+): Promise<unknown> {
   try {
-    await readBlobSlice(data, 0, 1);
+    await readBlobSlice(data, 0, 1, signal);
     return null;
   } catch (error) {
     return error ?? new Error("Reading a stored blob's bytes failed");
@@ -194,7 +200,9 @@ const AUDIT_CONCURRENCY = 4;
  * of a very large file, which this app supports.
  */
 export async function copyBlobBytes(source: Blob): Promise<ArrayBuffer> {
-  const failure = await withProbeDeadline(blobReadFailure(source));
+  const failure = await withProbeDeadline((signal) =>
+    blobReadFailure(source, signal),
+  );
   if (failure === PROBE_UNANSWERED) {
     throw new Error("Blob backing store did not answer a read probe");
   }
@@ -202,15 +210,34 @@ export async function copyBlobBytes(source: Blob): Promise<ArrayBuffer> {
   return source.arrayBuffer();
 }
 
-function withProbeDeadline(
-  probe: Promise<unknown>,
-): Promise<unknown | typeof PROBE_UNANSWERED> {
+/**
+ * Runs `probe` with a signal that aborts at the deadline, and then waits for the
+ * probe to stop: the stream it read through holds a blob-sized pipe until then,
+ * and an audit slot is only free once that is released. The wait is bounded too,
+ * since a read WebKit has lost may not answer the cancel either.
+ */
+async function withProbeDeadline<T>(
+  probe: (signal: AbortSignal) => Promise<T>,
+): Promise<T | typeof PROBE_UNANSWERED> {
+  const controller = new AbortController();
+  const running = probe(controller.signal);
+  const outcome = await beforeDeadline(running);
+  if (outcome !== PROBE_UNANSWERED) return outcome;
+  controller.abort();
+  await beforeDeadline(running.catch(() => undefined));
+  return PROBE_UNANSWERED;
+}
+
+function beforeDeadline<T>(
+  promise: Promise<T>,
+): Promise<T | typeof PROBE_UNANSWERED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
-    probe,
-    new Promise<typeof PROBE_UNANSWERED>((resolve) =>
-      setTimeout(() => resolve(PROBE_UNANSWERED), PROBE_DEADLINE_MS),
-    ),
-  ]);
+    promise,
+    new Promise<typeof PROBE_UNANSWERED>((resolve) => {
+      timer = setTimeout(() => resolve(PROBE_UNANSWERED), PROBE_DEADLINE_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -251,6 +278,29 @@ function withRecordIdentity(
     });
   }
   return data as File;
+}
+
+/** Replace a record's bytes, advancing its body revision. */
+function replaceBody(
+  record: StoredStirlingFileRecord,
+  data: ArrayBuffer | Blob,
+): void {
+  record.data = data;
+  record.bodyRevision = (record.bodyRevision ?? 0) + 1;
+}
+
+/** Apply `mutate`, advancing the body revision when it replaced the bytes
+ *  without doing so itself. False when `mutate` declined to write. */
+function applyMutation(
+  record: StoredStirlingFileRecord,
+  mutate: (record: StoredStirlingFileRecord) => boolean | void,
+): boolean {
+  const { data, bodyRevision } = record;
+  if (mutate(record) === false) return false;
+  if (record.data !== data && record.bodyRevision === bodyRevision) {
+    record.bodyRevision = (bodyRevision ?? 0) + 1;
+  }
+  return true;
 }
 
 /**
@@ -448,9 +498,12 @@ class FileStorageService {
   ): Promise<void> {
     // A record we can't read back at all is the caller's problem, not the probe's.
     const stored = await this.readRecord(db, record.id).catch(() => undefined);
-    if (!(stored?.data instanceof Blob)) return;
+    const storedData = stored?.data;
+    if (!(storedData instanceof Blob)) return;
 
-    const failure = await withProbeDeadline(blobReadFailure(stored.data));
+    const failure = await withProbeDeadline((signal) =>
+      blobReadFailure(storedData, signal),
+    );
     if (!failure) {
       this.blobReadbackVerified = true;
       return;
@@ -466,7 +519,7 @@ class FileStorageService {
 
     this.noteBlobUnreadable(failure);
     try {
-      record.data = await source.arrayBuffer();
+      replaceBody(record, await source.arrayBuffer());
       await this.putRecord(db, record);
     } catch (error) {
       // The record is unusable either way, and the read path reports that to the
@@ -544,8 +597,8 @@ class FileStorageService {
   private async auditRecord(record: StoredStirlingFileRecord): Promise<void> {
     // Under a deadline so a read WebKit leaves pending gives its slot back.
     // Unanswered proves nothing, so it reports nothing.
-    const failure = await withProbeDeadline(
-      blobReadFailure(record.data as Blob),
+    const failure = await withProbeDeadline((signal) =>
+      blobReadFailure(record.data as Blob, signal),
     );
     if (failure === PROBE_UNANSWERED) return;
     if (!failure) {
@@ -568,9 +621,10 @@ class FileStorageService {
       const db = await this.getDatabase();
       const record = await this.readRecord(db, fileId);
       if (!(record?.data instanceof Blob)) return;
-      const bytes = await withProbeDeadline(record.data.arrayBuffer());
+      const data = record.data;
+      const bytes = await withProbeDeadline(() => data.arrayBuffer());
       if (bytes === PROBE_UNANSWERED || !(bytes instanceof ArrayBuffer)) return;
-      record.data = bytes;
+      replaceBody(record, bytes);
       await this.putRecord(db, record);
       console.info(
         `[fileStorage] rescued "${record.name}" (${fileId}) to an in-memory copy before this browser could lose its blob`,
@@ -645,7 +699,7 @@ class FileStorageService {
           | StoredStirlingFileRecord
           | undefined;
         // Nothing to write: let the empty transaction commit and report false.
-        if (!record || mutate(record) === false) return;
+        if (!record || !applyMutation(record, mutate)) return;
         written = true;
         store.put(record);
       };
@@ -660,9 +714,9 @@ class FileStorageService {
     mutate: (record: StoredStirlingFileRecord) => boolean | void,
   ): Promise<boolean> {
     const record = await this.readRecord(db, fileId);
-    if (!record || mutate(record) === false) return false;
+    if (!record || !applyMutation(record, mutate)) return false;
     if (record.data instanceof Blob) {
-      record.data = await record.data.arrayBuffer();
+      replaceBody(record, await record.data.arrayBuffer());
     }
     await this.putRecord(db, record);
     return true;
@@ -767,15 +821,19 @@ class FileStorageService {
     record: StoredStirlingFileRecord,
     data: Blob,
   ): Promise<void> {
+    // Bytes stored since this read are newer than the copy below.
+    const revision = record.bodyRevision;
     try {
       // Unreadable or unanswered is reportIfUnreadable's to report.
-      if (await withProbeDeadline(blobReadFailure(data))) return;
+      if (await withProbeDeadline((signal) => blobReadFailure(data, signal)))
+        return;
       const renamed = await detachedFile(data, {
         name: record.name,
         type: record.type,
         lastModified: record.lastModified,
       });
       await this.updateRecord(record.id, (stored) => {
+        if (stored.bodyRevision !== revision) return false;
         stored.data = renamed;
       });
     } catch (error) {
