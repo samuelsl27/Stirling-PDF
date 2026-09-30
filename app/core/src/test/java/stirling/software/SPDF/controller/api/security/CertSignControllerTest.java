@@ -12,7 +12,14 @@ import static org.mockito.Mockito.mock;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.X509Certificate;
+import java.util.Date;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -20,6 +27,10 @@ import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -186,6 +197,33 @@ class CertSignControllerTest {
     }
 
     @Test
+    void testSignPdfWithVisibleSignatureAndNoReason() throws Exception {
+        MockMultipartFile pdfFile =
+                new MockMultipartFile(
+                        "fileInput", "test.pdf", MediaType.APPLICATION_PDF_VALUE, pdfBytes);
+        MockMultipartFile pfxFile =
+                new MockMultipartFile("p12File", "test-cert.pfx", "application/x-pkcs12", pfxBytes);
+
+        SignPDFWithCertRequest request = new SignPDFWithCertRequest();
+        request.setFileInput(pdfFile);
+        request.setCertType("PFX");
+        request.setP12File(pfxFile);
+        request.setPassword("password");
+        request.setShowSignature(true);
+        request.setLocation("test");
+        request.setName("tester");
+        request.setPageNumber(1);
+        request.setShowLogo(false);
+
+        ResponseEntity<Resource> response =
+                certSignController.signPDFWithCert(request, httpRequest);
+
+        try (PDDocument signed = Loader.loadPDF(drainBody(response))) {
+            assertEquals(1, signed.getSignatureDictionaries().size());
+        }
+    }
+
+    @Test
     void testSignPdfWithPkcs12() throws Exception {
         MockMultipartFile pdfFile =
                 new MockMultipartFile(
@@ -329,6 +367,180 @@ class CertSignControllerTest {
             assertNotNull(appearance.getMatrix());
             assertEquals(0f, appearance.getMatrix().getScaleX(), 0.01f);
         }
+    }
+
+    @Test
+    void marksTheOtherPagesOfAnUnsignedDocument() throws Exception {
+        byte[] signed =
+                drainBody(
+                        certSignController.signPDFWithCert(
+                                boxedRequest(twoPagePdf(), true), httpRequest));
+
+        try (PDDocument doc = Loader.loadPDF(signed)) {
+            // The mark's link back to the signed page.
+            assertEquals(1, doc.getPage(1).getAnnotations().size());
+        }
+    }
+
+    /**
+     * A countersignature leaves the other pages alone: marks written in its revision change page
+     * content the earlier signature covers, and validators report that as a modification.
+     */
+    @Test
+    void doesNotMarkThePagesOfAnAlreadySignedDocument() throws Exception {
+        byte[] once =
+                drainBody(
+                        certSignController.signPDFWithCert(
+                                boxedRequest(twoPagePdf(), false), httpRequest));
+
+        byte[] twice =
+                drainBody(
+                        certSignController.signPDFWithCert(boxedRequest(once, true), httpRequest));
+
+        try (PDDocument doc = Loader.loadPDF(twice)) {
+            assertEquals(2, doc.getSignatureDictionaries().size());
+            assertEquals(0, doc.getPage(1).getAnnotations().size());
+        }
+    }
+
+    /** Declared as PNG, but not an image: rejected up front instead of signing an empty file. */
+    @Test
+    void rejectsALogoThatCannotBeRead() {
+        SignPDFWithCertRequest request = boxedRequest(pdfBytes, false);
+        request.setShowLogo(true);
+        request.setLogoImage(
+                new MockMultipartFile(
+                        "logoImage", "logo.png", "image/png", "not an image".getBytes()));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> certSignController.signPDFWithCert(request, httpRequest));
+    }
+
+    @Test
+    void signsWithAReadableLogo() throws Exception {
+        java.awt.image.BufferedImage image =
+                new java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream png = new ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", png);
+        SignPDFWithCertRequest request = boxedRequest(pdfBytes, false);
+        request.setShowLogo(true);
+        request.setLogoImage(
+                new MockMultipartFile("logoImage", "logo.png", "image/png", png.toByteArray()));
+
+        byte[] signed = drainBody(certSignController.signPDFWithCert(request, httpRequest));
+
+        try (PDDocument doc = Loader.loadPDF(signed)) {
+            assertEquals(1, doc.getSignatureDictionaries().size());
+        }
+    }
+
+    @Test
+    void legacyAppearanceShowsTheNameAsWritten() throws Exception {
+        SignPDFWithCertRequest request = legacyRequest(p12For("CN=GARCIA PEREZ\\, JUAN,C=ES"));
+
+        String appearance =
+                appearanceOf(drainBody(certSignController.signPDFWithCert(request, httpRequest)));
+
+        assertTrue(appearance.contains("Signed by GARCIA PEREZ, JUAN"), appearance);
+    }
+
+    /** No common name to show, which is no reason to answer with an empty file. */
+    @Test
+    void legacyAppearanceSignsWithoutACommonName() throws Exception {
+        SignPDFWithCertRequest request = legacyRequest(p12For("O=Acme,C=ES"));
+
+        byte[] signed = drainBody(certSignController.signPDFWithCert(request, httpRequest));
+
+        try (PDDocument doc = Loader.loadPDF(signed)) {
+            assertEquals(1, doc.getSignatureDictionaries().size());
+        }
+        String appearance = appearanceOf(signed);
+        assertTrue(appearance.contains("Signed by C=ES,O=Acme"), appearance);
+    }
+
+    /** A visible signature with nothing configured, which draws the legacy appearance. */
+    private SignPDFWithCertRequest legacyRequest(byte[] p12) {
+        SignPDFWithCertRequest request = new SignPDFWithCertRequest();
+        request.setFileInput(
+                new MockMultipartFile(
+                        "fileInput", "test.pdf", MediaType.APPLICATION_PDF_VALUE, pdfBytes));
+        request.setCertType("PKCS12");
+        request.setP12File(
+                new MockMultipartFile("p12File", "signer.p12", "application/x-pkcs12", p12));
+        request.setPassword("password");
+        request.setShowSignature(true);
+        request.setShowLogo(false);
+        request.setReason("test");
+        request.setName("tester");
+        request.setPageNumber(1);
+        return request;
+    }
+
+    /** A PKCS12 keystore, password "password", with a new certificate for {@code subjectDn}. */
+    private static byte[] p12For(String subjectDn) throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair keyPair = generator.generateKeyPair();
+        long now = System.currentTimeMillis();
+        X500Name name = new X500Name(subjectDn);
+        X509Certificate certificate =
+                new JcaX509CertificateConverter()
+                        .getCertificate(
+                                new JcaX509v3CertificateBuilder(
+                                                name,
+                                                BigInteger.ONE,
+                                                new Date(now - 60_000L),
+                                                new Date(now + 86_400_000L),
+                                                name,
+                                                keyPair.getPublic())
+                                        .build(
+                                                new JcaContentSignerBuilder("SHA256withRSA")
+                                                        .build(keyPair.getPrivate())));
+        KeyStore store = KeyStore.getInstance("PKCS12");
+        store.load(null, null);
+        store.setKeyEntry(
+                "signer",
+                keyPair.getPrivate(),
+                "password".toCharArray(),
+                new Certificate[] {certificate});
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        store.store(out, "password".toCharArray());
+        return out.toByteArray();
+    }
+
+    private static byte[] twoPagePdf() throws java.io.IOException {
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage(PDRectangle.A4));
+            doc.addPage(new PDPage(PDRectangle.A4));
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            doc.save(baos);
+            return baos.toByteArray();
+        }
+    }
+
+    /** A visible signature in a drawn box on the first page. */
+    private SignPDFWithCertRequest boxedRequest(byte[] pdf, boolean markAllPages) {
+        SignPDFWithCertRequest request = new SignPDFWithCertRequest();
+        request.setFileInput(
+                new MockMultipartFile(
+                        "fileInput", "test.pdf", MediaType.APPLICATION_PDF_VALUE, pdf));
+        request.setCertType("PKCS12");
+        request.setP12File(
+                new MockMultipartFile(
+                        "p12File", "test-cert.p12", "application/x-pkcs12", p12Bytes));
+        request.setPassword("password");
+        request.setShowSignature(true);
+        request.setShowLogo(false);
+        request.setReason("test");
+        request.setName("tester");
+        request.setPageNumber(1);
+        request.setSignatureX(20f);
+        request.setSignatureY(20f);
+        request.setSignatureWidth(200f);
+        request.setSignatureHeight(60f);
+        request.setMarkAllPages(markAllPages);
+        return request;
     }
 
     @Test
