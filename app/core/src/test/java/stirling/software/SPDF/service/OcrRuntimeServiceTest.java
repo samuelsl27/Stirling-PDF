@@ -18,6 +18,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.sun.net.httpserver.HttpServer;
@@ -152,11 +154,109 @@ class OcrRuntimeServiceTest {
                 server.stop(0);
             }
         }
+
+        /**
+         * A real request starts over https, so this rule is what keeps a redirect from dropping to
+         * plain http. Tested from http to file:, which needs no certificate to set up.
+         */
+        @Test
+        @Timeout(20)
+        @DisplayName("a redirect keeps the scheme the request started with")
+        void refusesARedirectThatChangesScheme() throws Exception {
+            Path elsewhere = fileWith("elsewhere.txt", "not for the network");
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            server.createContext(
+                    "/start",
+                    exchange -> {
+                        exchange.getResponseHeaders().add("Location", fileUrl(elsewhere));
+                        exchange.sendResponseHeaders(302, -1);
+                        exchange.close();
+                    });
+            server.start();
+            try {
+                OcrRuntimeService svc = new OcrRuntimeService(new ApplicationProperties());
+                URI start =
+                        URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/start");
+
+                IOException e = assertThrows(IOException.class, () -> svc.open(start).close());
+                assertTrue(e.getMessage().contains("redirect"), e.getMessage());
+            } finally {
+                server.stop(0);
+            }
+        }
     }
 
     @Nested
     @DisplayName("download")
     class Download {
+
+        /**
+         * Local artefacts come from a local catalogue: the offline mirror these tests stand for.
+         */
+        @BeforeEach
+        void useALocalCatalogue() {
+            ApplicationProperties properties = new ApplicationProperties();
+            properties
+                    .getSystem()
+                    .getOcr()
+                    .setManifestUrl(fileUrl(tmp.resolve("ocr-manifest.json")));
+            service = new OcrRuntimeService(properties);
+        }
+
+        @Test
+        @DisplayName("an https catalogue may not name a local file")
+        void aRemoteCatalogueMayNotNameALocalFile() throws IOException {
+            Path source = fileWith("local.bin", "tesseract");
+            OcrArtifact artifact =
+                    new OcrArtifact(
+                            fileUrl(source), Files.size(source), sha256(source), "5.4.0", "engine");
+            // The default catalogue is the https release.
+            OcrRuntimeService remote = new OcrRuntimeService(new ApplicationProperties());
+            Path target = tmp.resolve("out.bin");
+
+            assertThrows(IOException.class, () -> remote.download(artifact, target, "engine"));
+            assertFalse(Files.exists(target));
+        }
+
+        /** Drive letters exist on Windows only; elsewhere every local path shares one root. */
+        @Test
+        @EnabledOnOs(OS.WINDOWS)
+        @DisplayName("a catalogue on one drive may not name a file on another")
+        void aLocalCatalogueMayNotNameAnotherDrive() {
+            String drive = tmp.getRoot().toString().substring(0, 1).toUpperCase();
+            String other = "Q".equals(drive) ? "R" : "Q";
+            OcrArtifact artifact =
+                    new OcrArtifact(
+                            "file:///" + other + ":/mirror/eng.traineddata",
+                            11,
+                            "0".repeat(64),
+                            null,
+                            "eng");
+
+            IOException e =
+                    assertThrows(
+                            IOException.class,
+                            () -> service.download(artifact, tmp.resolve("out.bin"), "eng"));
+            assertTrue(e.getMessage().startsWith("Only a catalogue"), e.getMessage());
+        }
+
+        @Test
+        @DisplayName("a catalogue on this disk may not name a file on another machine's share")
+        void aLocalCatalogueMayNotNameAnotherMachinesShare() {
+            OcrArtifact artifact =
+                    new OcrArtifact(
+                            "file://mirror.invalid/share/eng.traineddata",
+                            11,
+                            "0".repeat(64),
+                            null,
+                            "eng");
+
+            IOException e =
+                    assertThrows(
+                            IOException.class,
+                            () -> service.download(artifact, tmp.resolve("out.bin"), "eng"));
+            assertTrue(e.getMessage().startsWith("Only a catalogue"), e.getMessage());
+        }
 
         @Test
         @DisplayName("accepts a file whose SHA-256 matches the catalogue")
@@ -622,6 +722,42 @@ class OcrRuntimeServiceTest {
             assertEquals(2294433, loaded.languages().get("spa").size());
             // Absent sections must not blow up: a catalogue with no extras is perfectly valid.
             assertTrue(loaded.extras().isEmpty());
+        }
+
+        private OcrRuntimeService serviceReading(Path manifest) {
+            ApplicationProperties properties = new ApplicationProperties();
+            properties.getSystem().getOcr().setManifestUrl(fileUrl(manifest));
+            return new OcrRuntimeService(properties);
+        }
+
+        /**
+         * The status endpoint turns an IOException into "catalogue unreachable" and nothing else.
+         */
+        @Test
+        @DisplayName("a page that is not JSON, as a captive portal serves, is an IOException")
+        void refusesAPageThatIsNotJson() throws IOException {
+            Path page = fileWith("portal.json", "<html><body>Sign in to the wifi</body></html>");
+
+            assertThrows(IOException.class, () -> serviceReading(page).loadManifest());
+        }
+
+        @Test
+        @DisplayName("a catalogue that is JSON null is refused rather than cached")
+        void refusesNull() throws IOException {
+            Path empty = fileWith("null.json", "null");
+
+            assertThrows(IOException.class, () -> serviceReading(empty).loadManifest());
+        }
+
+        @Test
+        @DisplayName("a catalogue past the size cap is refused, however well formed")
+        void refusesAnOversizedCatalogue() throws IOException {
+            Path huge =
+                    fileWith(
+                            "huge.json",
+                            "{" + " ".repeat(OcrRuntimeService.MAX_MANIFEST_BYTES) + "}");
+
+            assertThrows(IOException.class, () -> serviceReading(huge).loadManifest());
         }
     }
 }

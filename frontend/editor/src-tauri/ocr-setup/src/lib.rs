@@ -22,6 +22,8 @@ mod msi;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
+use std::time::Duration;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -33,6 +35,8 @@ use msi::Handle;
 const MAX_ARCHIVE_BYTES: u64 = 300 * 1024 * 1024;
 const MAX_EXPANDED_BYTES: u64 = 700 * 1024 * 1024;
 const MAX_ENTRIES: usize = 5_000;
+/// The real catalogue is a few kilobytes; the backend applies the same ceiling.
+const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 
 /// The bar is driven in ticks; bytes would overflow the installer's i32.
 const TICKS: i32 = 1_000;
@@ -154,13 +158,20 @@ fn run(install: Handle) -> Result<(), String> {
     }
     let total_bytes: u64 = jobs.iter().map(|(_, a, _)| a.size.max(1)).sum();
 
+    // The runtime's own folder and the one above it are the levels an ordinary
+    // user could have made before the install ran, so both are checked, before
+    // creating them and after.
+    let base = request.target.parent().ok_or("the target has no parent")?;
+    refuse_redirects(base, &request.target)?;
     fs::create_dir_all(&request.target).map_err(|e| format!("{}: {e}", request.target.display()))?;
+    refuse_redirects(base, &request.target)?;
 
     let mut ticks_spent = 0i32;
     for (name, artifact, is_engine) in jobs {
         msi::action_data(install, &format!("Downloading {name}"));
 
         let temp = request.target.join(format!(".incoming-{}", sanitise(&name)));
+        refuse_redirects(&request.target, &temp)?;
         let bytes = download(&artifact, &temp, install)
             .map_err(|e| format!("{name}: {e}"))?;
 
@@ -206,14 +217,46 @@ fn platform_key() -> String {
 }
 
 fn fetch_manifest(url: &str) -> Result<Manifest, String> {
-    require_secure(url)?;
-    let body = ureq::get(url)
-        .timeout(std::time::Duration::from_secs(30))
-        .call()
+    let mut body = String::new();
+    open(url, Duration::from_secs(30))
         .map_err(|e| format!("fetching the catalogue: {e}"))?
-        .into_string()
+        .take(MAX_MANIFEST_BYTES + 1)
+        .read_to_string(&mut body)
         .map_err(|e| format!("reading the catalogue: {e}"))?;
+    if body.len() as u64 > MAX_MANIFEST_BYTES {
+        return Err("the catalogue is larger than the size cap".into());
+    }
     serde_json::from_str(&body).map_err(|e| format!("parsing the catalogue: {e}"))
+}
+
+/// Opens a catalogue or an artefact: a local file for an offline mirror, https
+/// for everything else. ureq has no transport for `file:`, so that scheme is
+/// read from disk and never handed to it.
+fn open(url: &str, timeout: Duration) -> Result<Box<dyn Read>, String> {
+    require_secure(url)?;
+    let url = url.trim();
+    if url.to_ascii_lowercase().starts_with("file:") {
+        let path = url::Url::parse(url)
+            .ok()
+            .and_then(|parsed| parsed.to_file_path().ok())
+            .ok_or_else(|| format!("not a usable file address: {url}"))?;
+        let file = File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        return Ok(Box::new(file));
+    }
+    let response = agent()
+        .get(url)
+        .timeout(timeout)
+        .call()
+        .map_err(|e| format!("{e}"))?;
+    Ok(Box::new(response.into_reader()))
+}
+
+/// Every network request goes through this agent. `https_only` also holds on
+/// the redirects it follows, which the check on the address the catalogue gave
+/// cannot reach: an https catalogue could otherwise answer 302 to plain http.
+fn agent() -> &'static ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| ureq::AgentBuilder::new().https_only(true).build())
 }
 
 /// https or a local file only.
@@ -234,14 +277,8 @@ fn download(artifact: &Artifact, target: &Path, install: Handle) -> Result<u64, 
     if artifact.sha256.trim().is_empty() {
         return Err("the catalogue lists it without a SHA-256".into());
     }
-    require_secure(&artifact.url)?;
 
-    let response = ureq::get(&artifact.url)
-        .timeout(std::time::Duration::from_secs(600))
-        .call()
-        .map_err(|e| format!("{e}"))?;
-
-    let mut reader = response.into_reader().take(MAX_ARCHIVE_BYTES + 1);
+    let mut reader = open(&artifact.url, Duration::from_secs(600))?.take(MAX_ARCHIVE_BYTES + 1);
     let mut file = File::create(target).map_err(|e| format!("{}: {e}", target.display()))?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0u8; 64 * 1024];
@@ -292,6 +329,7 @@ fn expand_engine(archive: &Path, target: &Path) -> Result<(), String> {
         return Err("the archive has too many files".into());
     }
 
+    refuse_reparse_point(target)?;
     let root = target.canonicalize().map_err(|e| format!("{e}"))?;
     let mut expanded: u64 = 0;
 
@@ -299,6 +337,7 @@ fn expand_engine(archive: &Path, target: &Path) -> Result<(), String> {
         let mut entry = zip.by_index(index).map_err(|e| format!("{e}"))?;
         let name = entry.name().to_string();
         let destination = resolve_inside(&root, &name)?;
+        refuse_redirects(&root, &destination)?;
 
         if entry.is_dir() {
             fs::create_dir_all(&destination).map_err(|e| format!("{e}"))?;
@@ -333,12 +372,52 @@ fn install_model(temp: &Path, target: &Path, artifact: &Artifact, label: &str) -
         .filter(|name| name.ends_with(".traineddata"))
         .ok_or_else(|| format!("{label}: the catalogue URL does not name a .traineddata file"))?;
 
-    let tessdata = target.join("tessdata");
+    refuse_reparse_point(target)?;
+    let root = target.canonicalize().map_err(|e| format!("{e}"))?;
+    let tessdata = root.join("tessdata");
+    refuse_redirects(&root, &tessdata)?;
     fs::create_dir_all(&tessdata).map_err(|e| format!("{e}"))?;
-    let root = tessdata.canonicalize().map_err(|e| format!("{e}"))?;
-    let destination = resolve_inside(&root, file_name)?;
+    let destination = resolve_inside(&tessdata, file_name)?;
+    refuse_redirects(&root, &destination)?;
     fs::rename(temp, &destination).map_err(|e| format!("{e}"))?;
     Ok(())
+}
+
+/// Refuses `path` when it, or any directory between `root` and it, is a reparse
+/// point.
+///
+/// This action runs as SYSTEM, and ordinary users can create entries on the
+/// way: anywhere under ProgramData by default, and in tessdata on purpose. A
+/// junction planted there carries the write wherever it points, and
+/// `resolve_inside` only reads the text of the path. Checked before each
+/// write; one swapped in between the check and the write is left to the ACLs
+/// the installer sets.
+fn refuse_redirects(root: &Path, path: &Path) -> Result<(), String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| format!("{} is outside {}", path.display(), root.display()))?;
+    let mut current = root.to_path_buf();
+    refuse_reparse_point(&current)?;
+    for component in relative.components() {
+        current.push(component);
+        refuse_reparse_point(&current)?;
+    }
+    Ok(())
+}
+
+fn refuse_reparse_point(path: &Path) -> Result<(), String> {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 => Err(format!(
+            "refusing to write through a link: {}",
+            path.display()
+        )),
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
 }
 
 /// Joins an untrusted relative name onto a trusted root and proves the result
@@ -398,10 +477,184 @@ mod tests {
     }
 
     #[test]
+    fn the_agent_refuses_plain_http() {
+        // The address the catalogue gives is checked before the first request,
+        // but a redirect is followed inside the agent, so the agent is what has
+        // to refuse http. Nothing listens on port 9: the refusal comes first.
+        let error = agent()
+            .get("http://127.0.0.1:9/")
+            .call()
+            .expect_err("plain http must never be fetched");
+        assert_eq!(
+            error.kind(),
+            ureq::ErrorKind::InsecureRequestHttpsOnly,
+            "{error}"
+        );
+    }
+
+    #[test]
     fn refuses_plain_http() {
         assert!(require_secure("http://example.invalid/manifest.json").is_err());
         assert!(require_secure("https://example.invalid/manifest.json").is_ok());
         assert!(require_secure("file:///C:/mirror/manifest.json").is_ok());
+    }
+
+    /// A `file:` address for a path, the way an offline mirror names one.
+    fn file_url(path: &Path) -> String {
+        url::Url::from_file_path(path)
+            .expect("an absolute path")
+            .to_string()
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("stirling-ocr-setup-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("a scratch directory");
+        dir
+    }
+
+    #[test]
+    fn reads_a_catalogue_from_a_file_address() {
+        let dir = scratch_dir("catalogue");
+        let manifest = dir.join("ocr-manifest.json");
+        fs::write(
+            &manifest,
+            r#"{"engine":{"windows-x86_64":{"url":"file:///C:/mirror/engine.zip","sha256":"00"}}}"#,
+        )
+        .unwrap();
+
+        let parsed = fetch_manifest(&file_url(&manifest)).expect("a local catalogue should load");
+        assert!(parsed.engine.contains_key("windows-x86_64"));
+    }
+
+    #[test]
+    fn copies_and_verifies_an_artefact_from_a_file_address() {
+        let dir = scratch_dir("artefact");
+        let source = dir.join("eng.traineddata");
+        fs::write(&source, b"model bytes").unwrap();
+        let artifact = Artifact {
+            url: file_url(&source),
+            size: 11,
+            sha256: hex(&Sha256::digest(b"model bytes")),
+            name: None,
+        };
+        let target = dir.join(".incoming-eng");
+
+        assert_eq!(
+            download(&artifact, &target, 0).expect("a local artefact should copy"),
+            11
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"model bytes");
+    }
+
+    /// What an ordinary user can make in a directory they may write to: an entry
+    /// that leads somewhere else. A junction needs no privilege, unlike a symlink.
+    fn junction(link: &Path, target: &Path) {
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .expect("cmd should run");
+        assert!(
+            made.status.success(),
+            "{}",
+            String::from_utf8_lossy(&made.stderr)
+        );
+    }
+
+    fn engine_archive(path: &Path) {
+        let mut zip = zip::ZipWriter::new(File::create(path).unwrap());
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("tessdata/configs/pdf", stored).unwrap();
+        zip.write_all(b"tessedit_create_pdf 1\n").unwrap();
+        zip.finish().unwrap();
+    }
+
+    #[test]
+    fn the_engine_expands_into_a_plain_folder() {
+        let dir = scratch_dir("engine-plain");
+        let root = dir.join("tesseract");
+        fs::create_dir_all(&root).unwrap();
+        let archive = dir.join("engine.zip");
+        engine_archive(&archive);
+
+        expand_engine(&archive, &root).expect("a plain folder takes the engine");
+        assert!(root.join("tessdata").join("configs").join("pdf").is_file());
+    }
+
+    #[test]
+    fn a_language_installs_into_a_plain_folder() {
+        let dir = scratch_dir("model-plain");
+        let root = dir.join("tesseract");
+        fs::create_dir_all(&root).unwrap();
+        let temp = root.join(".incoming-eng");
+        fs::write(&temp, b"model bytes").unwrap();
+        let artifact = Artifact {
+            url: "https://example.invalid/eng.traineddata".into(),
+            size: 11,
+            sha256: String::new(),
+            name: None,
+        };
+
+        install_model(&temp, &root, &artifact, "eng").expect("a plain folder takes the model");
+        assert!(root.join("tessdata").join("eng.traineddata").is_file());
+    }
+
+    #[test]
+    fn the_runtime_folder_may_not_be_a_junction() {
+        let dir = scratch_dir("root-junction");
+        let elsewhere = dir.join("elsewhere");
+        fs::create_dir_all(&elsewhere).unwrap();
+        let root = dir.join("tesseract");
+        junction(&root, &elsewhere);
+
+        assert!(refuse_redirects(&dir, &root).is_err());
+        assert!(refuse_redirects(&dir, &dir.join("not-yet-created")).is_ok());
+    }
+
+    #[test]
+    fn the_engine_is_not_written_through_a_junction() {
+        let dir = scratch_dir("engine-junction");
+        let root = dir.join("tesseract");
+        let elsewhere = dir.join("elsewhere");
+        fs::create_dir_all(root.join("tessdata")).unwrap();
+        fs::create_dir_all(&elsewhere).unwrap();
+        junction(&root.join("tessdata").join("configs"), &elsewhere);
+        let archive = dir.join("engine.zip");
+        engine_archive(&archive);
+
+        assert!(expand_engine(&archive, &root).is_err());
+        assert!(
+            !elsewhere.join("pdf").exists(),
+            "the write escaped the root"
+        );
+    }
+
+    #[test]
+    fn a_language_is_not_installed_through_a_junction() {
+        let dir = scratch_dir("model-junction");
+        let root = dir.join("tesseract");
+        let elsewhere = dir.join("elsewhere");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&elsewhere).unwrap();
+        junction(&root.join("tessdata"), &elsewhere);
+        let temp = root.join(".incoming-eng");
+        fs::write(&temp, b"model bytes").unwrap();
+        let artifact = Artifact {
+            url: "https://example.invalid/eng.traineddata".into(),
+            size: 11,
+            sha256: String::new(),
+            name: None,
+        };
+
+        assert!(install_model(&temp, &root, &artifact, "eng").is_err());
+        assert!(
+            !elsewhere.join("eng.traineddata").exists(),
+            "the write escaped the root"
+        );
     }
 
     #[test]
