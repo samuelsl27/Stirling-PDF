@@ -1,12 +1,15 @@
+import { useLocalProcessingOnly } from "@app/hooks/useLocalProcessingOnly";
 import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import i18n from "i18next";
 import { useNavigate } from "react-router-dom";
 
 import { FileId } from "@app/types/file";
@@ -183,7 +186,15 @@ export function FilesPageProvider({ children }: { children: React.ReactNode }) {
   // Refs keep workspace changes from restarting library refreshes.
   const { openFileIdsRef, onOpenFilesDetached } = useDiskLinkReconcile();
 
-  const [allFiles, setAllFiles] = useState<StirlingFileStub[]>([]);
+  const localOnly = useLocalProcessingOnly();
+  const [storedFiles, setAllFiles] = useState<StirlingFileStub[]>([]);
+  const allFiles = useMemo(
+    () =>
+      localOnly
+        ? storedFiles.filter((file) => getFileOrigin(file) === "local")
+        : storedFiles,
+    [storedFiles, localOnly],
+  );
   const [loading, setLoading] = useState(true);
   // Only the newest refresh may publish results or clear loading.
   const refreshGenRef = useRef(0);
@@ -222,7 +233,9 @@ export function FilesPageProvider({ children }: { children: React.ReactNode }) {
       if (gen !== refreshGenRef.current) return;
       console.error("[FilesPageContext] refresh failed", err);
       setFoldersError(
-        err instanceof Error ? err.message : "Failed to load files",
+        err instanceof Error
+          ? err.message
+          : i18n.t("filesPage.error.loadFilesFailed", "Failed to load files"),
       );
     } finally {
       if (gen === refreshGenRef.current) setLoading(false);
@@ -237,6 +250,14 @@ export function FilesPageProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   useCoalescedCallback(refresh, indexedDBRevision);
+
+  // The hook cancels timers but cannot cancel a started run, so unmount has to
+  // invalidate it here or a late scan would publish into a gone tree.
+  useEffect(() => {
+    return () => {
+      refreshGenRef.current++;
+    };
+  }, []);
 
   const fileMap = useMemo(() => {
     const map = new Map<FileId, StirlingFileStub>();

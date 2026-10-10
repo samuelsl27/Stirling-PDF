@@ -16,7 +16,7 @@ import {
   Alert,
   Group,
 } from "@mantine/core";
-import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import { Icon } from "@app/ui/Icon";
 import { Button } from "@app/ui/Button";
 import { ActionIcon } from "@app/ui/ActionIcon";
 import { Select } from "@app/ui/Select";
@@ -38,6 +38,7 @@ import {
   SIGNATURE_PLACEMENT_CANCEL_EVENT,
   SIGNATURE_PLACEMENT_DONE_EVENT,
   SIGNATURE_PLACEMENT_START_EVENT,
+  showSignaturePlacement,
   type SignaturePlacementResult,
 } from "@app/constants/signaturePlacementEvents";
 
@@ -139,6 +140,18 @@ const SignatureAppearanceSettings = ({
   // back, since the button that cancels it has gone.
   useEffect(() => cancelPlacement, [cancelPlacement]);
 
+  // The box stays on the page while the appearance is set up, so the options can be
+  // judged against the space they fill. Signing collapses this panel, which takes it away.
+  const { showSignature, signatureArea, pageNumber } = parameters;
+  useEffect(() => {
+    showSignaturePlacement(
+      showSignature && signatureArea
+        ? { pageNumber, area: signatureArea }
+        : null,
+    );
+  }, [showSignature, signatureArea, pageNumber]);
+  useEffect(() => () => showSignaturePlacement(null), []);
+
   // The request sends the marks only with a box, so the panel shows them only then.
   const repeatsOnEveryPage =
     parameters.markAllPages && !!parameters.signatureArea;
@@ -225,6 +238,10 @@ const SignatureAppearanceSettings = ({
           />
           <TextInput
             label={t("certSign.name", "Name")}
+            description={t(
+              "certSign.nameDescription",
+              "Saved in the signature's details. The visible signature shows the name on the certificate.",
+            )}
             value={parameters.name}
             onChange={(event) =>
               onParameterChange("name", event.currentTarget.value)
@@ -365,7 +382,7 @@ const SignatureAppearanceSettings = ({
                   "Use the default position",
                 )}
               >
-                <RestartAltIcon style={{ fontSize: "1rem" }} />
+                <Icon name="rotate-ccw" size={16} />
               </ActionIcon>
             </Group>
 
