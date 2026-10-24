@@ -1,0 +1,45 @@
+/**
+ * IFormDataProvider — Common interface for form data providers.
+ *
+ * This abstraction allows the form fill UI to work with different backends:
+ * - PdfLibFormProvider: Frontend-only, uses pdf-lib to extract/fill form fields
+ *   (used in normal viewer mode to avoid sending large PDFs to the backend)
+ * - PdfBoxFormProvider: Backend API, uses PDFBox via REST endpoints
+ *   (used in the dedicated formFill tool for full-fidelity form handling)
+ *
+ * The UI components (FormFieldOverlay, FormFill, FormFieldSidebar) consume
+ * data through FormFillContext, which delegates to whichever provider is active.
+ */
+import type { FormField } from "@editor/tools/formFill/types";
+import type { XfaMode } from "@editor/tools/formFill/xfa";
+
+/** Per-save choices; a provider that cannot honour one ignores it. */
+export interface FillOptions {
+  /** What the save does to a hybrid form's XFA. Only a provider that saves on the backend acts on it. */
+  xfaMode?: XfaMode;
+}
+
+export interface IFormDataProvider {
+  /** Unique identifier for the provider (for debugging/logging) */
+  readonly name: string;
+
+  /**
+   * Extract form fields with their coordinates from a PDF file.
+   * Returns the same FormField[] shape regardless of provider.
+   */
+  fetchFields(file: File | Blob): Promise<FormField[]>;
+
+  /**
+   * Apply filled values to a PDF and return the resulting PDF blob.
+   * @param file - The original PDF
+   * @param values - Map of field name → value
+   * @param flatten - Whether to flatten the form (make fields non-editable)
+   * @returns The filled PDF as a Blob
+   */
+  fillForm(
+    file: File | Blob,
+    values: Record<string, string>,
+    flatten: boolean,
+    options?: FillOptions,
+  ): Promise<Blob>;
+}
