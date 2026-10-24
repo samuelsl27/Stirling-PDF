@@ -1,11 +1,11 @@
 /**
  * API service for form-related backend calls.
  */
-import apiClient from "@app/services/apiClient";
+import apiClient from "@editor/services/apiClient";
 import {
   readFieldBundle,
   supportsFieldBundle,
-} from "@app/tools/formFill/fieldBundle";
+} from "@editor/tools/formFill/fieldBundle";
 import type {
   FormField,
   NewFieldDefinition,
@@ -13,8 +13,8 @@ import type {
   FieldEditBatch,
   FieldEditResult,
   SkippedFieldEdit,
-} from "@app/tools/formFill/types";
-import type { XfaMode, XfaSyncSummary } from "@app/tools/formFill/xfa";
+} from "@editor/tools/formFill/types";
+import type { XfaMode, XfaSyncSummary } from "@editor/tools/formFill/xfa";
 
 /**
  * Fetch form fields with coordinates from the backend.

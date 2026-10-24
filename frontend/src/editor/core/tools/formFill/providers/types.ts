@@ -10,8 +10,8 @@
  * The UI components (FormFieldOverlay, FormFill, FormFieldSidebar) consume
  * data through FormFillContext, which delegates to whichever provider is active.
  */
-import type { FormField } from "@app/tools/formFill/types";
-import type { XfaMode } from "@app/tools/formFill/xfa";
+import type { FormField } from "@editor/tools/formFill/types";
+import type { XfaMode } from "@editor/tools/formFill/xfa";
 
 /** Per-save choices; a provider that cannot honour one ignores it. */
 export interface FillOptions {
