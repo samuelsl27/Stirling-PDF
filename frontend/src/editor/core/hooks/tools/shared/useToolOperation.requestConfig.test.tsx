@@ -8,7 +8,10 @@ import { useToolOperation } from "@editor/hooks/tools/shared/useToolOperation";
 import { mergeOperationConfig } from "@editor/hooks/tools/merge/useMergeOperation";
 import { defaultParameters as mergeParameters } from "@editor/hooks/tools/merge/useMergeParameters";
 import { DEVICE_LOCAL_REQUEST } from "@editor/constants/deviceLocalEndpoints";
-import { FileContextProvider, useFileActions } from "@editor/contexts/FileContext";
+import {
+  FileContextProvider,
+  useFileActions,
+} from "@editor/contexts/FileContext";
 import { NavigationProvider } from "@editor/contexts/NavigationContext";
 import { ToolRegistryProvider } from "@editor/contexts/ToolRegistryProvider";
 import { PreferencesProvider } from "@editor/contexts/PreferencesContext";
@@ -52,12 +55,16 @@ vi.mock("@editor/components/notifications/useNotificationsAvailable", () => ({
 }));
 
 vi.mock("@editor/services/notificationRetry", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@editor/services/notificationRetry")>()),
+  ...(await importOriginal<
+    typeof import("@editor/services/notificationRetry")
+  >()),
   stashRetryPayload: mocks.stash,
 }));
 
 vi.mock("@editor/services/failureReporting", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@editor/services/failureReporting")>()),
+  ...(await importOriginal<
+    typeof import("@editor/services/failureReporting")
+  >()),
   reportToolFailure: vi.fn().mockResolvedValue(undefined),
   errorCodeOf: vi.fn().mockResolvedValue(null),
 }));
