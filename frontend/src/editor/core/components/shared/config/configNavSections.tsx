@@ -3,13 +3,13 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import PreferencesSection, {
   type PreferencesSectionProps,
-} from "@app/components/shared/config/configSections/preferences/PreferencesSection";
-import AboutSection from "@app/components/shared/config/configSections/AboutSection";
-import OcrSection from "@app/components/shared/config/configSections/OcrSection";
+} from "@editor/components/shared/config/configSections/preferences/PreferencesSection";
+import AboutSection from "@editor/components/shared/config/configSections/AboutSection";
+import OcrSection from "@editor/components/shared/config/configSections/OcrSection";
 import type {
   ConfigNavItem,
   ConfigNavSection,
-} from "@app/components/shared/config/types";
+} from "@editor/components/shared/config/types";
 
 // Re-exported for the many existing importers; the definitions live in
 // config/types so type-only consumers don't pull the section tree in.
