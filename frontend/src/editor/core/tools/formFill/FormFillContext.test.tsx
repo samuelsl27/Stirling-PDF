@@ -297,6 +297,31 @@ describe("FormFillContext shared design draft", () => {
     });
     expect(fetchFields).toHaveBeenCalledTimes(before + 1);
   });
+
+  it("ignores a bundle from another document of the same size", async () => {
+    const { result: hook } = renderHook(() => useFormFill(), { wrapper });
+    act(() => hook.current.setProviderMode("pdfbox"));
+    await act(async () => {
+      await hook.current.fetchFields(blob(), "file-A");
+    });
+    act(() => hook.current.stageModification("existing", { label: "Renamed" }));
+    const edited = blob();
+    const other = blob();
+    // jsdom's Blob has no arrayBuffer, and the setup's stand-in answers the same bytes for all.
+    vi.spyOn(edited, "arrayBuffer").mockResolvedValue(new ArrayBuffer(8));
+    vi.spyOn(other, "arrayBuffer").mockResolvedValue(
+      new Uint8Array(8).fill(1).buffer,
+    );
+    const fields = [{ name: "bundled", type: "text", value: "", widgets: [] }];
+    applyFieldEdits.mockResolvedValue({ ...result([]), blob: edited, fields });
+    const before = fetchFields.mock.calls.length;
+    await act(async () => {
+      await hook.current.commitDesign(blob(), () =>
+        hook.current.fetchFields(other, "file-B"),
+      );
+    });
+    expect(fetchFields).toHaveBeenCalledTimes(before + 1);
+  });
 });
 
 describe("FormFillContext value retention", () => {

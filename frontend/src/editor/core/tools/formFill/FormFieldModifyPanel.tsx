@@ -30,6 +30,7 @@ import {
 import { isTextEntryTarget } from "@editor/tools/formFill/usePageScale";
 import { PendingFields } from "@editor/tools/formFill/PendingFields";
 import { SkippedEditsAlert } from "@editor/tools/formFill/SkippedEditsAlert";
+import { XfaNotice } from "@editor/tools/formFill/XfaNotice";
 import styles from "@editor/tools/formFill/FormFill.module.css";
 
 interface FormFieldModifyPanelProps {
@@ -467,6 +468,7 @@ export function FormFieldModifyPanel({
         </Text>
 
         <SkippedEditsAlert />
+        <XfaNotice file={currentFile} variant="panel" scope="structure" />
 
         <NoFieldsMessage />
       </div>
