@@ -197,7 +197,7 @@ frontend/src-tauri/provisioner/target
 # once, rather than shipped inside the installer (~37 MB archive).
 dist/ocr/
 # Left over from when the runtime was bundled into the installer.
-frontend/editor/src-tauri/tesseract/
+frontend/src-tauri/tesseract/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
