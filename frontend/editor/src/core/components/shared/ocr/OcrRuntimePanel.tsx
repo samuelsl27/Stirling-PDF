@@ -7,16 +7,16 @@ import React, {
 } from "react";
 import { Alert, Checkbox, Loader, ScrollArea, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { Button } from "@app/ui/Button";
-import { getOcrDisplayName } from "@app/utils/languageMapping";
-import { ocrLanguageName } from "@app/utils/ocrLanguageName";
+import { Button } from "@editor/ui/Button";
+import { getOcrDisplayName } from "@editor/utils/languageMapping";
+import { ocrLanguageName } from "@editor/utils/ocrLanguageName";
 import {
   changeOcrLanguages,
   formatBytes,
   getOcrRuntimeStatus,
   installOcrEngine,
   type OcrRuntimeStatus,
-} from "@app/services/ocrRuntimeService";
+} from "@editor/services/ocrRuntimeService";
 
 export interface OcrRuntimePanelProps {
   /** Skip the initial fetch until the panel is actually on screen. */

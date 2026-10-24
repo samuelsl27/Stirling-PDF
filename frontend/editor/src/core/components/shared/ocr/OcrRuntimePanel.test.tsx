@@ -1,13 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import OcrRuntimePanel from "@app/components/shared/ocr/OcrRuntimePanel";
-import type { OcrRuntimeStatus } from "@app/services/ocrRuntimeService";
+import OcrRuntimePanel from "@editor/components/shared/ocr/OcrRuntimePanel";
+import type { OcrRuntimeStatus } from "@editor/services/ocrRuntimeService";
 
 const mocks = vi.hoisted(() => ({ getStatus: vi.fn() }));
 
-vi.mock("@app/services/ocrRuntimeService", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@app/services/ocrRuntimeService")>()),
+vi.mock("@editor/services/ocrRuntimeService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@editor/services/ocrRuntimeService")>()),
   getOcrRuntimeStatus: mocks.getStatus,
 }));
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse } from "msw";
-import OcrRuntimePanel from "@app/components/shared/ocr/OcrRuntimePanel";
+import OcrRuntimePanel from "@editor/components/shared/ocr/OcrRuntimePanel";
 
 const STATUS_ENDPOINT = "/api/v1/ui-data/ocr/runtime";
 

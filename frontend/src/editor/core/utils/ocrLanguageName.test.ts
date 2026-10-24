@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ocrLanguageName } from "@app/utils/ocrLanguageName";
+import { ocrLanguageName } from "@editor/utils/ocrLanguageName";
 
 const old = (name: string) => `${name} (antiguo)`;
 

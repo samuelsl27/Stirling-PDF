@@ -1,7 +1,7 @@
 import React from "react";
 import { Modal } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import OcrRuntimePanel from "@app/components/shared/ocr/OcrRuntimePanel";
+import OcrRuntimePanel from "@editor/components/shared/ocr/OcrRuntimePanel";
 
 export interface OcrRuntimeManagerProps {
   opened: boolean;

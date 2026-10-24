@@ -1,14 +1,14 @@
 import { describe, expect, test, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import LanguagePicker from "@app/components/tools/ocr/LanguagePicker";
+import LanguagePicker from "@editor/components/tools/ocr/LanguagePicker";
 
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 
-vi.mock("@app/services/apiClient", () => ({ default: { get: mocks.get } }));
+vi.mock("@editor/services/apiClient", () => ({ default: { get: mocks.get } }));
 
 // Only the list the picker would offer matters here, not how the dropdown draws it.
-vi.mock("@app/components/shared/DropdownListWithFooter", () => ({
+vi.mock("@editor/components/shared/DropdownListWithFooter", () => ({
   default: ({ items }: { items: { value: string }[] }) => (
     <ul>
       {items.map((item) => (
@@ -18,7 +18,7 @@ vi.mock("@app/components/shared/DropdownListWithFooter", () => ({
   ),
 }));
 
-vi.mock("@app/components/tools/ocr/OcrRuntimeManager", () => ({
+vi.mock("@editor/components/tools/ocr/OcrRuntimeManager", () => ({
   default: () => null,
 }));
 
