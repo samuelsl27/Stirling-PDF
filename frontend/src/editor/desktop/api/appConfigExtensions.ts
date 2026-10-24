@@ -1,5 +1,5 @@
-import { getHardwareSigningCapabilities } from "@app/services/hardwareSigningService";
-import type { AppConfig } from "@app/types/appConfig";
+import { getHardwareSigningCapabilities } from "@editor/services/hardwareSigningService";
+import type { AppConfig } from "@editor/types/appConfig";
 
 /** Ample for a backend that is up; the config load waits on it. */
 const CAPABILITIES_TIMEOUT_MS = 5000;

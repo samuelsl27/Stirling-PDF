@@ -1,4 +1,4 @@
-import type { Rectangle } from "@app/utils/cropCoordinates";
+import type { Rectangle } from "@editor/utils/cropCoordinates";
 
 /**
  * Window events carrying signature placement between the cert-sign tool and the viewer.

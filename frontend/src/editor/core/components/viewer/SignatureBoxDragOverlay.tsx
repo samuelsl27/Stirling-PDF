@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { pdfWorkerManager } from "@app/services/pdfWorkerManager";
+import { pdfWorkerManager } from "@editor/services/pdfWorkerManager";
 import {
   SIGNATURE_PLACEMENT_CANCEL_EVENT,
   SIGNATURE_PLACEMENT_DONE_EVENT,
@@ -7,7 +7,7 @@ import {
   SIGNATURE_PLACEMENT_START_EVENT,
   currentSignaturePlacement,
   type SignaturePlacementResult,
-} from "@app/constants/signaturePlacementEvents";
+} from "@editor/constants/signaturePlacementEvents";
 
 interface SignatureBoxDragOverlayProps {
   pageIndex: number;

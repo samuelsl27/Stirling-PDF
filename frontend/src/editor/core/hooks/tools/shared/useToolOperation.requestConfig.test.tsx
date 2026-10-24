@@ -3,21 +3,21 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { I18nextProvider } from "react-i18next";
-import i18n from "@app/i18n/config";
-import { useToolOperation } from "@app/hooks/tools/shared/useToolOperation";
-import { mergeOperationConfig } from "@app/hooks/tools/merge/useMergeOperation";
-import { defaultParameters as mergeParameters } from "@app/hooks/tools/merge/useMergeParameters";
-import { DEVICE_LOCAL_REQUEST } from "@app/constants/deviceLocalEndpoints";
-import { FileContextProvider, useFileActions } from "@app/contexts/FileContext";
-import { NavigationProvider } from "@app/contexts/NavigationContext";
-import { ToolRegistryProvider } from "@app/contexts/ToolRegistryProvider";
-import { PreferencesProvider } from "@app/contexts/PreferencesContext";
-import { createTestStirlingFile } from "@app/tests/utils/testFileHelpers";
-import { createNewStirlingFileStub } from "@app/types/fileContext";
+import i18n from "@editor/i18n/config";
+import { useToolOperation } from "@editor/hooks/tools/shared/useToolOperation";
+import { mergeOperationConfig } from "@editor/hooks/tools/merge/useMergeOperation";
+import { defaultParameters as mergeParameters } from "@editor/hooks/tools/merge/useMergeParameters";
+import { DEVICE_LOCAL_REQUEST } from "@editor/constants/deviceLocalEndpoints";
+import { FileContextProvider, useFileActions } from "@editor/contexts/FileContext";
+import { NavigationProvider } from "@editor/contexts/NavigationContext";
+import { ToolRegistryProvider } from "@editor/contexts/ToolRegistryProvider";
+import { PreferencesProvider } from "@editor/contexts/PreferencesContext";
+import { createTestStirlingFile } from "@editor/tests/utils/testFileHelpers";
+import { createNewStirlingFileStub } from "@editor/types/fileContext";
 
 const mocks = vi.hoisted(() => ({ post: vi.fn(), stash: vi.fn() }));
 
-vi.mock("@app/services/apiClient", () => ({
+vi.mock("@editor/services/apiClient", () => ({
   default: {
     post: mocks.post,
     get: vi.fn(),
@@ -27,7 +27,7 @@ vi.mock("@app/services/apiClient", () => ({
   },
 }));
 
-vi.mock("@app/services/fileStorage", () => ({
+vi.mock("@editor/services/fileStorage", () => ({
   onRecordUnreadable: () => () => {},
   fileStorage: {
     init: vi.fn().mockResolvedValue(undefined),
@@ -38,7 +38,7 @@ vi.mock("@app/services/fileStorage", () => ({
   },
 }));
 
-vi.mock("@app/services/thumbnailGenerationService", () => ({
+vi.mock("@editor/services/thumbnailGenerationService", () => ({
   thumbnailGenerationService: {
     generateThumbnail: vi.fn().mockResolvedValue("data:image/png;base64,x"),
     cleanup: vi.fn(),
@@ -47,17 +47,17 @@ vi.mock("@app/services/thumbnailGenerationService", () => ({
 }));
 
 // A build with a bell, which is the only kind that stashes a failure for retrying.
-vi.mock("@app/components/notifications/useNotificationsAvailable", () => ({
+vi.mock("@editor/components/notifications/useNotificationsAvailable", () => ({
   useNotificationsAvailable: () => true,
 }));
 
-vi.mock("@app/services/notificationRetry", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@app/services/notificationRetry")>()),
+vi.mock("@editor/services/notificationRetry", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@editor/services/notificationRetry")>()),
   stashRetryPayload: mocks.stash,
 }));
 
-vi.mock("@app/services/failureReporting", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@app/services/failureReporting")>()),
+vi.mock("@editor/services/failureReporting", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@editor/services/failureReporting")>()),
   reportToolFailure: vi.fn().mockResolvedValue(undefined),
   errorCodeOf: vi.fn().mockResolvedValue(null),
 }));

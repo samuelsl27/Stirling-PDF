@@ -1,20 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Stack, Text, Box, Group, Center, Loader } from "@mantine/core";
-import { ActionIcon } from "@app/ui/ActionIcon";
+import { ActionIcon } from "@editor/ui/ActionIcon";
 import { useTranslation } from "react-i18next";
-import { Icon } from "@app/ui/Icon";
-import CropAreaSelector from "@app/components/tools/crop/CropAreaSelector";
-import DocumentThumbnail from "@app/components/shared/filePreview/DocumentThumbnail";
-import { pdfWorkerManager } from "@app/services/pdfWorkerManager";
-import { PAGE_SIZES } from "@app/constants/pageSizeConstants";
-import { DEFAULT_SIGNATURE_BOX } from "@app/constants/certSignConstants";
+import { Icon } from "@editor/ui/Icon";
+import CropAreaSelector from "@editor/components/tools/crop/CropAreaSelector";
+import DocumentThumbnail from "@editor/components/shared/filePreview/DocumentThumbnail";
+import { pdfWorkerManager } from "@editor/services/pdfWorkerManager";
+import { PAGE_SIZES } from "@editor/constants/pageSizeConstants";
+import { DEFAULT_SIGNATURE_BOX } from "@editor/constants/certSignConstants";
 import {
   calculatePDFBounds,
   constrainCropAreaToPDF,
   PDFBounds,
   Rectangle,
   roundCropArea,
-} from "@app/utils/cropCoordinates";
+} from "@editor/utils/cropCoordinates";
 
 /** Side of the square preview, in pixels. */
 const CONTAINER_SIZE = 300;

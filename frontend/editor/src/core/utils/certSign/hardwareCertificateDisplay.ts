@@ -1,4 +1,4 @@
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

@@ -6,7 +6,7 @@ import {
   listPkcs11Certificates,
   Pkcs11LibraryInfo,
   listWindowsCertificates,
-} from "@app/services/hardwareSigningService";
+} from "@editor/services/hardwareSigningService";
 
 export const CUSTOM_LIBRARY_VALUE = "__custom__";
 

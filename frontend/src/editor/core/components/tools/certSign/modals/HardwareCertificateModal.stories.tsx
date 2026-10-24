@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import HardwareCertificateModal from "@app/components/tools/certSign/modals/HardwareCertificateModal";
-import { Button } from "@app/ui/Button";
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+import HardwareCertificateModal from "@editor/components/tools/certSign/modals/HardwareCertificateModal";
+import { Button } from "@editor/ui/Button";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 
 const cert = (
   overrides: Partial<HardwareCertificateInfo>,

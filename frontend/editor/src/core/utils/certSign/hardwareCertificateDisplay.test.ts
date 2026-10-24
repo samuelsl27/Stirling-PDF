@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 import {
   byUsefulness,
   displayName,
@@ -11,7 +11,7 @@ import {
   rank,
   subjectDetails,
   validityOf,
-} from "@app/utils/certSign/hardwareCertificateDisplay";
+} from "@editor/utils/certSign/hardwareCertificateDisplay";
 
 const cert = (
   overrides: Partial<HardwareCertificateInfo> = {},

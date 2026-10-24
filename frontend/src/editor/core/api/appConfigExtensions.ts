@@ -1,4 +1,4 @@
-import type { AppConfig } from "@app/types/appConfig";
+import type { AppConfig } from "@editor/types/appConfig";
 
 /**
  * Corrects the parts of the app-config that describe the user's own machine.

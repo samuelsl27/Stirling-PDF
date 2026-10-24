@@ -1,13 +1,13 @@
 import React, { useCallback, useState } from "react";
 import { Checkbox, Stack, Text, Group } from "@mantine/core";
-import { Button } from "@app/ui/Button";
+import { Button } from "@editor/ui/Button";
 import { useTranslation } from "react-i18next";
 import {
   CERTIFICATE_ATTRIBUTES,
   CERTIFICATE_ATTRIBUTE_LABEL_KEYS,
   DEFAULT_VISIBLE_ATTRIBUTES,
   type CertificateAttribute,
-} from "@app/constants/certSignConstants";
+} from "@editor/constants/certSignConstants";
 
 interface SignatureAttributePickerProps {
   /** Fields currently ticked, in the order they will be drawn. */

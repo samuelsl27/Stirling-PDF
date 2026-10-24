@@ -1,29 +1,29 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import SignatureAppearanceSettings from "@app/components/tools/certSign/SignatureAppearanceSettings";
+import SignatureAppearanceSettings from "@editor/components/tools/certSign/SignatureAppearanceSettings";
 import {
   CertSignParameters,
   defaultParameters,
-} from "@app/hooks/tools/certSign/useCertSignParameters";
+} from "@editor/hooks/tools/certSign/useCertSignParameters";
 import {
   CERTIFICATE_ATTRIBUTES,
   CERTIFICATE_ATTRIBUTE_LABEL_KEYS,
-} from "@app/constants/certSignConstants";
+} from "@editor/constants/certSignConstants";
 
 const mockT = vi.fn((key: string) => `mock-${key}`);
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: mockT }),
 }));
 
-vi.mock("@app/contexts/FileContext", () => ({
+vi.mock("@editor/contexts/FileContext", () => ({
   useAllFiles: () => ({ files: [], fileStubs: [] }),
 }));
 
 // The thumbnail picker pulls in the PDF worker, which has no business being started
 // by a test about panel layout. It only renders in the "every page" mode anyway, and
 // only its reset is kept.
-vi.mock("@app/components/tools/certSign/SignaturePlacementPicker", () => ({
+vi.mock("@editor/components/tools/certSign/SignaturePlacementPicker", () => ({
   default: ({
     onSignatureAreaChange,
   }: {

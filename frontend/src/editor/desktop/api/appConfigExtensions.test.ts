@@ -11,11 +11,11 @@ const { getHardwareSigningCapabilities } = vi.hoisted(() => ({
   getHardwareSigningCapabilities: vi.fn(),
 }));
 
-vi.mock("@app/services/hardwareSigningService", () => ({
+vi.mock("@editor/services/hardwareSigningService", () => ({
   getHardwareSigningCapabilities,
 }));
 
-import { applyDeviceCapabilities } from "@app/api/appConfigExtensions";
+import { applyDeviceCapabilities } from "@editor/api/appConfigExtensions";
 
 const capabilities = (desktop: boolean) => ({
   desktop,

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
-import SignatureBoxDragOverlay from "@app/components/viewer/SignatureBoxDragOverlay";
-import { showSignaturePlacement } from "@app/constants/signaturePlacementEvents";
+import SignatureBoxDragOverlay from "@editor/components/viewer/SignatureBoxDragOverlay";
+import { showSignaturePlacement } from "@editor/constants/signaturePlacementEvents";
 
 // A page of 600 x 800 pt, drawn at half size so CSS pixels are half the points.
-vi.mock("@app/services/pdfWorkerManager", () => ({
+vi.mock("@editor/services/pdfWorkerManager", () => ({
   pdfWorkerManager: {
     createDocument: vi.fn().mockResolvedValue({
       getPage: vi.fn().mockResolvedValue({

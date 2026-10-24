@@ -9,9 +9,9 @@ import {
   TextInput,
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { Button } from "@app/ui/Button";
-import { column, DataTable } from "@app/ui/DataTable";
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+import { Button } from "@editor/ui/Button";
+import { column, DataTable } from "@editor/ui/DataTable";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 import {
   byUsefulness,
   displayName,
@@ -21,7 +21,7 @@ import {
   isUsable,
   matches,
   validityOf,
-} from "@app/utils/certSign/hardwareCertificateDisplay";
+} from "@editor/utils/certSign/hardwareCertificateDisplay";
 
 interface HardwareCertificateModalProps {
   opened: boolean;

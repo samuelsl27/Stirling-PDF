@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import HardwareCertificateModal from "@app/components/tools/certSign/modals/HardwareCertificateModal";
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+import HardwareCertificateModal from "@editor/components/tools/certSign/modals/HardwareCertificateModal";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
