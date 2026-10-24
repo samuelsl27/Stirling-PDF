@@ -1,8 +1,8 @@
-import apiClient from "@app/services/apiClient";
-import { applyDeviceCapabilities } from "@app/api/appConfigExtensions";
-import { getSimulatedAppConfig } from "@app/testing/serverExperienceSimulations";
-import type { AppConfig } from "@app/types/appConfig";
-import type { EndpointAvailabilityDetails } from "@app/types/endpointAvailability";
+import apiClient from "@editor/services/apiClient";
+import { applyDeviceCapabilities } from "@editor/api/appConfigExtensions";
+import { getSimulatedAppConfig } from "@editor/testing/serverExperienceSimulations";
+import type { AppConfig } from "@editor/types/appConfig";
+import type { EndpointAvailabilityDetails } from "@editor/types/endpointAvailability";
 
 /** Unauthenticated and unreachable both mean "assume login is on". */
 export const DEFAULT_APP_CONFIG: AppConfig = { enableLogin: true };

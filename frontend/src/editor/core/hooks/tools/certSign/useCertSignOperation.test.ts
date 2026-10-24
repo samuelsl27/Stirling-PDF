@@ -2,11 +2,11 @@ import { describe, expect, test } from "vitest";
 import {
   buildCertSignFormData,
   certSignOperationConfig,
-} from "@app/hooks/tools/certSign/useCertSignOperation";
+} from "@editor/hooks/tools/certSign/useCertSignOperation";
 import {
   CertSignParameters,
   defaultParameters,
-} from "@app/hooks/tools/certSign/useCertSignParameters";
+} from "@editor/hooks/tools/certSign/useCertSignParameters";
 
 const pdf = () =>
   new File(["%PDF-1.4"], "doc.pdf", { type: "application/pdf" });

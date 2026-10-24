@@ -9,21 +9,21 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { Button } from "@app/ui/Button";
+import { Button } from "@editor/ui/Button";
 import { useTranslation } from "react-i18next";
-import { CertSignParameters } from "@app/hooks/tools/certSign/useCertSignParameters";
+import { CertSignParameters } from "@editor/hooks/tools/certSign/useCertSignParameters";
 import {
   CUSTOM_LIBRARY_VALUE,
   useHardwareCertificates,
-} from "@app/hooks/tools/certSign/useHardwareCertificates";
-import { HardwareCertificateInfo } from "@app/services/hardwareSigningService";
+} from "@editor/hooks/tools/certSign/useHardwareCertificates";
+import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
 import {
   displayName,
   distinctIssuer,
   expiryDate,
   validityOf,
-} from "@app/utils/certSign/hardwareCertificateDisplay";
-import HardwareCertificateModal from "@app/components/tools/certSign/modals/HardwareCertificateModal";
+} from "@editor/utils/certSign/hardwareCertificateDisplay";
+import HardwareCertificateModal from "@editor/components/tools/certSign/modals/HardwareCertificateModal";
 
 interface HardwareCertificateSettingsProps {
   parameters: CertSignParameters;

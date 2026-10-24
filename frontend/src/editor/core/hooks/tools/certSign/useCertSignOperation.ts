@@ -1,23 +1,23 @@
 import { useTranslation } from "react-i18next";
 import i18next from "i18next";
-import { CERTIFICATE_ATTRIBUTE_LABEL_KEYS } from "@app/constants/certSignConstants";
+import { CERTIFICATE_ATTRIBUTE_LABEL_KEYS } from "@editor/constants/certSignConstants";
 import {
   useToolOperation,
   defineSingleFileTool,
-} from "@app/hooks/tools/shared/useToolOperation";
+} from "@editor/hooks/tools/shared/useToolOperation";
 import {
   objectToFormData,
   type FormDataFiles,
   type ToolApiParams,
   type ToolEndpoint,
-} from "@app/hooks/tools/shared/toolApiMapping";
-import { createStandardErrorHandler } from "@app/utils/toolErrorHandler";
-import { DEVICE_LOCAL_REQUEST } from "@app/constants/deviceLocalEndpoints";
+} from "@editor/hooks/tools/shared/toolApiMapping";
+import { createStandardErrorHandler } from "@editor/utils/toolErrorHandler";
+import { DEVICE_LOCAL_REQUEST } from "@editor/constants/deviceLocalEndpoints";
 import {
   validateCertSignParameters,
   CertSignParameters,
   defaultParameters,
-} from "@app/hooks/tools/certSign/useCertSignParameters";
+} from "@editor/hooks/tools/certSign/useCertSignParameters";
 
 const ENDPOINT = "/api/v1/security/cert-sign" satisfies ToolEndpoint;
 type CertSignApiParams = ToolApiParams[typeof ENDPOINT];

@@ -1,14 +1,14 @@
-import { BaseParameters } from "@app/types/parameters";
+import { BaseParameters } from "@editor/types/parameters";
 import {
   useBaseParameters,
   BaseParametersHook,
-} from "@app/hooks/tools/shared/useBaseParameters";
-import { Rectangle } from "@app/utils/cropCoordinates";
+} from "@editor/hooks/tools/shared/useBaseParameters";
+import { Rectangle } from "@editor/utils/cropCoordinates";
 import {
   CertificateAttribute,
   DEFAULT_SIGNATURE_LOGO_POSITION,
   SignatureLogoPosition,
-} from "@app/constants/certSignConstants";
+} from "@editor/constants/certSignConstants";
 
 export interface CertSignParameters extends BaseParameters {
   // Where the signing certificate comes from:

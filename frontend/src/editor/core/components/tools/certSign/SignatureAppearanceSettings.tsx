@@ -16,31 +16,31 @@ import {
   Alert,
   Group,
 } from "@mantine/core";
-import { Icon } from "@app/ui/Icon";
-import { Button } from "@app/ui/Button";
-import { ActionIcon } from "@app/ui/ActionIcon";
-import { Select } from "@app/ui/Select";
-import { FormField } from "@app/ui/FormField";
+import { Icon } from "@editor/ui/Icon";
+import { Button } from "@editor/ui/Button";
+import { ActionIcon } from "@editor/ui/ActionIcon";
+import { Select } from "@editor/ui/Select";
+import { FormField } from "@editor/ui/FormField";
 import { useTranslation } from "react-i18next";
-import { CertSignParameters } from "@app/hooks/tools/certSign/useCertSignParameters";
-import { useAllFiles } from "@app/contexts/FileContext";
-import { FileStoreContext } from "@app/contexts/file/contexts";
-import FileUploadButton from "@app/components/shared/FileUploadButton";
-import SignaturePlacementPicker from "@app/components/tools/certSign/SignaturePlacementPicker";
-import SignatureAttributePicker from "@app/components/tools/certSign/SignatureAttributePicker";
+import { CertSignParameters } from "@editor/hooks/tools/certSign/useCertSignParameters";
+import { useAllFiles } from "@editor/contexts/FileContext";
+import { FileStoreContext } from "@editor/contexts/file/contexts";
+import FileUploadButton from "@editor/components/shared/FileUploadButton";
+import SignaturePlacementPicker from "@editor/components/tools/certSign/SignaturePlacementPicker";
+import SignatureAttributePicker from "@editor/components/tools/certSign/SignatureAttributePicker";
 import {
   DEFAULT_SIGNATURE_LOGO_POSITION,
   LOGO_POSITION_FALLBACKS,
   SIGNATURE_LOGO_POSITIONS,
   type SignatureLogoPosition,
-} from "@app/constants/certSignConstants";
+} from "@editor/constants/certSignConstants";
 import {
   SIGNATURE_PLACEMENT_CANCEL_EVENT,
   SIGNATURE_PLACEMENT_DONE_EVENT,
   SIGNATURE_PLACEMENT_START_EVENT,
   showSignaturePlacement,
   type SignaturePlacementResult,
-} from "@app/constants/signaturePlacementEvents";
+} from "@editor/constants/signaturePlacementEvents";
 
 type PlacementPickerProps = Omit<
   ComponentProps<typeof SignaturePlacementPicker>,
