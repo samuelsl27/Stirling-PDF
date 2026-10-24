@@ -253,10 +253,9 @@ describe("FormFillContext XFA handling", () => {
     act(() => hook.current.stageModification("a", { x: 1 }));
 
     await act(async () => {
-      await hook.current.commitModifications(source());
-    });
-    await act(async () => {
-      await hook.current.fetchFields(committed, "file-A-committed");
+      await hook.current.commitDesign(source(), (updated) =>
+        hook.current.fetchFields(updated, "file-A-committed"),
+      );
     });
 
     expect(hook.current.xfaMode).toBe("none");
@@ -273,7 +272,7 @@ describe("FormFillContext XFA handling", () => {
     act(() => hook.current.stageModification("a", { x: 1 }));
 
     await act(async () => {
-      await hook.current.commitModifications(source());
+      await hook.current.commitDesign(source(), async () => {});
     });
 
     expect(applyFieldEdits).toHaveBeenCalledWith(

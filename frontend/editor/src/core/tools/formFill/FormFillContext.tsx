@@ -120,7 +120,7 @@ class FormValuesStore {
 
   setValue(fieldName: string, value: string): void {
     if (this._values[fieldName] === value) return;
-    this._values[fieldName] = value;
+    this._values = { ...this._values, [fieldName]: value };
     this._version++;
     this._fieldListeners.get(fieldName)?.forEach((l) => l());
     this._globalListeners.forEach((l) => l());
@@ -269,7 +269,7 @@ export interface FormFillContextValue {
 
   /** Current tool mode. */
   mode: FormMode;
-  /** Switch mode. Switching clears the other mode's uncommitted working state. */
+  /** Switching Create/Modify keeps their shared design draft. */
   setMode: (mode: FormMode) => void;
 
   // --- Create mode ---
@@ -291,8 +291,15 @@ export interface FormFillContextValue {
   updatePendingField: (id: string, patch: Partial<NewFieldDefinition>) => void;
   removePendingField: (id: string) => void;
   clearPendingFields: () => void;
-  /** POST queued fields to the backend; resolves to the updated PDF blob. */
-  commitNewFields: (file: File | Blob) => Promise<Blob>;
+  /** Applies the shared design draft and clears it only after persistence succeeds. */
+  commitDesign: (
+    file: File | Blob,
+    apply: (blob: Blob) => Promise<void>,
+  ) => Promise<void>;
+  discardDesign: () => void;
+  discardValues: () => void;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
 
   // --- Modify mode ---
   /** Field currently selected for editing in modify mode. */
@@ -313,8 +320,6 @@ export interface FormFillContextValue {
   toggleFieldDeleted: (name: string) => void;
   /** Discard all staged modifications and deletions. */
   clearModifications: () => void;
-  /** POST staged modifications + deletions; resolves to the updated PDF blob. */
-  commitModifications: (file: File | Blob) => Promise<Blob>;
 
   /** True when create or modify mode has uncommitted work. */
   hasUncommittedChanges: boolean;
@@ -442,6 +447,8 @@ export function FormFillProvider({
   );
   const [pendingFields, setPendingFields] = useState<PendingField[]>([]);
   const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const committingDesignRef = useRef(false);
 
   // Undo covers the staged edits, which is what the user has been doing here; the applied
   // document keeps its own version history elsewhere.
@@ -539,6 +546,8 @@ export function FormFillProvider({
   } | null>(null);
 
   const clearEditingState = useCallback(() => {
+    undoStackRef.current = [];
+    setCanUndo(false);
     setCreationType(null);
     setPendingFields([]);
     setSelectedField(null);
@@ -564,6 +573,7 @@ export function FormFillProvider({
       // different file would edit the wrong PDF. Checked here, before any await, because
       // forFileIdRef is null for the whole fetch and the success path may never run.
       if (
+        !committingDesignRef.current &&
         editedFileIdRef.current != null &&
         (fileId ?? null) !== editedFileIdRef.current
       ) {
@@ -639,7 +649,10 @@ export function FormFillProvider({
 
         // pdfbox returns signature fields without a rendered appearance; merge the
         // pdfium ones by name, since appending would list a signature twice.
-        if (providerModeRef.current === "pdfbox") {
+        if (
+          providerModeRef.current === "pdfbox" &&
+          fields.some((field) => field.type === "signature")
+        ) {
           try {
             // Convert File/Blob to ArrayBuffer for pdfiumService
             const arrayBuffer = await file.arrayBuffer();
@@ -783,7 +796,6 @@ export function FormFillProvider({
         blob = await syncClientSave(file, blob, flatten);
       }
       savedOutputRef.current = blob;
-      dispatch({ type: "MARK_CLEAN" });
       return blob;
     },
     [valuesStore, syncClientSave],
@@ -846,19 +858,22 @@ export function FormFillProvider({
     resetXfaChoice();
   }, [valuesStore, clearEditingState, resetXfaChoice]);
 
-  // --- Mode switching ---
-  const setMode = useCallback(
-    (next: FormMode) => {
-      setModeState((prev) => {
-        if (prev === next) return prev;
-        // Leaving a mode discards its uncommitted working state so the user
-        // doesn't carry half-drawn fields or staged edits between modes.
-        clearEditingState();
-        return next;
-      });
-    },
-    [clearEditingState],
-  );
+  const discardValues = useCallback(() => {
+    valuesStore.reset(
+      Object.fromEntries(
+        fieldsRef.current.map((field) => [field.name, field.value ?? ""]),
+      ),
+    );
+    dispatch({ type: "MARK_CLEAN" });
+    dispatch({ type: "SET_VALIDATION_ERRORS", errors: {} });
+  }, [valuesStore]);
+
+  const setMode = useCallback((next: FormMode) => {
+    setCreationType(null);
+    setPreviewing(false);
+    setSelectedField(null);
+    setModeState(next);
+  }, []);
 
   // --- Create mode ---
   const addPendingField = useCallback(
@@ -920,34 +935,6 @@ export function FormFillProvider({
     setCreationType(null);
   }, []);
 
-  const commitNewFields = useCallback(
-    async (file: File | Blob): Promise<Blob> => {
-      // Strip the client-side id before sending to the backend.
-      const definitions: NewFieldDefinition[] = pendingFields.map(
-        ({ id: _id, ...rest }) => rest,
-      );
-      const result = await applyFieldEdits(
-        file,
-        { add: definitions },
-        xfaModeRef.current,
-      );
-      savedOutputRef.current = result.blob;
-      bundledFieldsRef.current = result.fields
-        ? { fields: result.fields, output: result.blob }
-        : null;
-      setSkippedEdits(result.skipped);
-      setSkippedTotal(result.skippedTotal);
-      skipReportFileIdRef.current = PENDING_SKIP_REPORT;
-      setPendingFields([]);
-      setCreationType(null);
-      // The batch is gone, so the stamp must not survive to trigger a clear on the
-      // post-commit re-fetch; that would wipe the skip report we just set.
-      editedFileIdRef.current = null;
-      return result.blob;
-    },
-    [pendingFields],
-  );
-
   // --- Modify mode ---
   const stageModification = useCallback(
     (targetName: string, patch: Partial<ModifyFieldDefinition>) => {
@@ -983,32 +970,46 @@ export function FormFillProvider({
     setSelectedField(null);
   }, []);
 
-  const commitModifications = useCallback(
-    async (file: File | Blob): Promise<Blob> => {
-      // Apply property/geometry changes (for fields not being deleted) and the
-      // deletions in a single backend round-trip.
-      const updates = Object.values(modifiedFields).filter(
-        (m) => !deletedFieldNames.includes(m.targetName),
-      );
-      const result = await applyFieldEdits(
-        file,
-        { modify: updates, delete: deletedFieldNames },
-        xfaModeRef.current,
-      );
-      savedOutputRef.current = result.blob;
-      bundledFieldsRef.current = result.fields
-        ? { fields: result.fields, output: result.blob }
-        : null;
-      setSkippedEdits(result.skipped);
-      setSkippedTotal(result.skippedTotal);
-      skipReportFileIdRef.current = PENDING_SKIP_REPORT;
-      setModifiedFields({});
-      setDeletedFieldNames([]);
-      setSelectedField(null);
-      editedFileIdRef.current = null;
-      return result.blob;
+  const commitDesign = useCallback(
+    async (
+      file: File | Blob,
+      apply: (blob: Blob) => Promise<void>,
+    ): Promise<void> => {
+      const sourceFileId = lastKnownFileIdRef.current;
+      committingDesignRef.current = true;
+      try {
+        const result = await applyFieldEdits(
+          file,
+          {
+          add: pendingFields.map(({ id: _id, ...definition }) => definition),
+          modify: Object.values(modifiedFields).filter(
+            (edit) => !deletedFieldNames.includes(edit.targetName),
+          ),
+          delete: deletedFieldNames,
+          },
+          xfaModeRef.current,
+        );
+        savedOutputRef.current = result.blob;
+        bundledFieldsRef.current = result.fields
+          ? { fields: result.fields, output: result.blob }
+          : null;
+        await apply(result.blob);
+        clearEditingState();
+        setSkippedEdits(result.skipped);
+        setSkippedTotal(result.skippedTotal);
+        skipReportFileIdRef.current =
+          forFileIdRef.current ?? PENDING_SKIP_REPORT;
+      } catch (error) {
+        // A replacement fetch starts only after persistence. Reapplying its draft would
+        // duplicate fields if storage succeeded but the viewer could not open the PDF.
+        if (lastKnownFileIdRef.current !== sourceFileId) clearEditingState();
+        throw error;
+      } finally {
+        bundledFieldsRef.current = null;
+        committingDesignRef.current = false;
+      }
     },
-    [modifiedFields, deletedFieldNames],
+    [pendingFields, modifiedFields, deletedFieldNames, clearEditingState],
   );
 
   const hasUncommittedChanges =
@@ -1077,7 +1078,11 @@ export function FormFillProvider({
       updatePendingField,
       removePendingField,
       clearPendingFields,
-      commitNewFields,
+      commitDesign,
+      discardDesign: clearEditingState,
+      discardValues,
+      saving,
+      setSaving,
       selectedFieldName,
       setSelectedField,
       modifiedFields,
@@ -1086,7 +1091,6 @@ export function FormFillProvider({
       deletedFieldNames,
       toggleFieldDeleted,
       clearModifications,
-      commitModifications,
       hasUncommittedChanges,
       skippedEdits,
       skippedTotal,
@@ -1125,7 +1129,10 @@ export function FormFillProvider({
       updatePendingField,
       removePendingField,
       clearPendingFields,
-      commitNewFields,
+      commitDesign,
+      clearEditingState,
+      discardValues,
+      saving,
       selectedFieldName,
       modifiedFields,
       stageModification,
@@ -1133,7 +1140,6 @@ export function FormFillProvider({
       deletedFieldNames,
       toggleFieldDeleted,
       clearModifications,
-      commitModifications,
       hasUncommittedChanges,
       skippedEdits,
       skippedTotal,

@@ -1,16 +1,8 @@
 /** Left panel for "modify" mode; page highlighting lives in FormFieldEditOverlay. */
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   Text,
   Group,
-  Alert,
   Collapse,
   Paper,
   NumberInput,
@@ -36,14 +28,16 @@ import {
   type EditableFieldProps,
 } from "@app/tools/formFill/FormFieldPropertyEditor";
 import { isTextEntryTarget } from "@app/tools/formFill/usePageScale";
+import { PendingFields } from "@app/tools/formFill/PendingFields";
 import { SkippedEditsAlert } from "@app/tools/formFill/SkippedEditsAlert";
 import { XfaNotice } from "@app/tools/formFill/XfaNotice";
-import { useFormCommit } from "@app/tools/formFill/useFormCommit";
 import styles from "@app/tools/formFill/FormFill.module.css";
 
 interface FormFieldModifyPanelProps {
   currentFile: File | Blob | null;
-  onApplied?: (blob: Blob) => void;
+  onSave: () => Promise<boolean>;
+  saving: boolean;
+  changeCount: number;
 }
 
 interface FieldGeometry {
@@ -112,25 +106,11 @@ function editorValue(
   };
 }
 
-function CommitErrorAlert({ error }: { error: string | null }) {
-  if (!error) return null;
-  return (
-    <Alert
-      icon={<Icon name="triangle-alert" size={16} />}
-      color="red"
-      variant="light"
-      p="xs"
-      radius="sm"
-    >
-      <Text size="xs">{error}</Text>
-    </Alert>
-  );
-}
-
 function NoFieldsMessage() {
   const { t } = useTranslation();
-  const { state } = useFormFill();
-  if (state.fields.length > 0 || state.loading) return null;
+  const { state, pendingFields } = useFormFill();
+  if (state.fields.length > 0 || pendingFields.length > 0 || state.loading)
+    return null;
   return (
     <Text size="xs" c="dimmed" ta="center" py="md">
       {t("formFill.modify.empty", "This PDF has no form fields yet.")}
@@ -415,21 +395,20 @@ function PageSection({
 
 export function FormFieldModifyPanel({
   currentFile,
-  onApplied,
+  onSave,
+  saving,
+  changeCount,
 }: FormFieldModifyPanelProps) {
   const { t } = useTranslation();
   const {
     state,
     selectedFieldName,
     setSelectedField,
-    modifiedFields,
-    deletedFieldNames,
-    commitModifications,
     hasUncommittedChanges,
+    pendingFields,
     dragActiveRef,
   } = useFormFill();
 
-  const { committing, error, commit } = useFormCommit(onApplied);
   const selectedRowRef = useRef<HTMLDivElement>(null);
 
   // A long form is easier to scan a page at a time; pages start open so nothing hides itself.
@@ -478,18 +457,6 @@ export function FormFieldModifyPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedFieldName, setSelectedField, dragActiveRef]);
 
-  const changeCount =
-    Object.keys(modifiedFields).length + deletedFieldNames.length;
-
-  const handleCommit = useCallback(() => {
-    if (!currentFile || !hasUncommittedChanges) return;
-    commit(
-      () => commitModifications(currentFile),
-      "formFill.modify.failed",
-      "Failed to save changes",
-    );
-  }, [currentFile, hasUncommittedChanges, commitModifications, commit]);
-
   return (
     <div className={styles.root}>
       <div className={styles.header}>
@@ -500,14 +467,13 @@ export function FormFieldModifyPanel({
           )}
         </Text>
 
-        <CommitErrorAlert error={error} />
-
         <SkippedEditsAlert />
         <XfaNotice file={currentFile} variant="panel" scope="structure" />
 
         <NoFieldsMessage />
       </div>
 
+      {pendingFields.length > 0 && <PendingFields />}
       <ScrollArea className={styles.fieldList}>
         <div className={styles.fieldListInner}>
           {sortedPages.map((pageIdx, i) => (
@@ -527,8 +493,8 @@ export function FormFieldModifyPanel({
       <div className={styles.footer}>
         <Button
           size="sm"
-          onClick={handleCommit}
-          loading={committing}
+          onClick={onSave}
+          loading={saving}
           disabled={!currentFile || !hasUncommittedChanges}
           data-testid="form-modify-commit"
         >
