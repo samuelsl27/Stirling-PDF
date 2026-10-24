@@ -1,4 +1,5 @@
 import apiClient from "@editor/services/apiClient";
+import { applyDeviceCapabilities } from "@editor/api/appConfigExtensions";
 import { getSimulatedAppConfig } from "@editor/testing/serverExperienceSimulations";
 import type { AppConfig } from "@editor/types/appConfig";
 import type { EndpointAvailabilityDetails } from "@editor/types/endpointAvailability";
@@ -15,7 +16,7 @@ export async function fetchAppConfig(): Promise<AppConfig> {
       "/api/v1/config/app-config",
       { suppressErrorToast: true, skipAuthRedirect: true },
     );
-    return response.data;
+    return applyDeviceCapabilities(response.data);
   } catch (error) {
     // 401 is an answer, not a failure: the app runs unauthenticated.
     if ((error as { response?: { status?: number } })?.response?.status === 401)

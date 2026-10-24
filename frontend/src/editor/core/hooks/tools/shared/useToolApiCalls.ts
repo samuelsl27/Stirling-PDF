@@ -36,6 +36,15 @@ export interface ApiCallsConfig<TParams = void> {
   filePrefix?: string;
   responseHandler?: ResponseHandler;
   preserveBackendFilename?: boolean;
+  /**
+   * Extra axios config for this tool's requests, derived from its parameters.
+   *
+   * Exists for decisions the endpoint path cannot express. Certificate signing
+   * posts to the same path whether the key came from an uploaded keystore or
+   * from the user's own machine, yet only the latter has to run locally - see
+   * `DEVICE_LOCAL_REQUEST` in @app/constants/deviceLocalEndpoints.
+   */
+  requestConfig?: (params: TParams) => Record<string, unknown>;
 }
 
 export const useToolApiCalls = <TParams = void>() => {
@@ -129,6 +138,7 @@ export const useToolApiCalls = <TParams = void>() => {
                   responseType: "blob",
                   cancelToken: cancellation.token,
                   signal: sourceLifetime,
+                  ...config.requestConfig?.(params),
                 });
           console.debug("[processFiles] Response OK", {
             name: file.name,
