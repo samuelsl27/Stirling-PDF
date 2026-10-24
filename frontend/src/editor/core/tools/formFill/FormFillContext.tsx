@@ -981,11 +981,11 @@ export function FormFillProvider({
         const result = await applyFieldEdits(
           file,
           {
-          add: pendingFields.map(({ id: _id, ...definition }) => definition),
-          modify: Object.values(modifiedFields).filter(
-            (edit) => !deletedFieldNames.includes(edit.targetName),
-          ),
-          delete: deletedFieldNames,
+            add: pendingFields.map(({ id: _id, ...definition }) => definition),
+            modify: Object.values(modifiedFields).filter(
+              (edit) => !deletedFieldNames.includes(edit.targetName),
+            ),
+            delete: deletedFieldNames,
           },
           xfaModeRef.current,
         );
