@@ -7,7 +7,9 @@ import type { OcrRuntimeStatus } from "@editor/services/ocrRuntimeService";
 const mocks = vi.hoisted(() => ({ getStatus: vi.fn() }));
 
 vi.mock("@editor/services/ocrRuntimeService", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@editor/services/ocrRuntimeService")>()),
+  ...(await importOriginal<
+    typeof import("@editor/services/ocrRuntimeService")
+  >()),
   getOcrRuntimeStatus: mocks.getStatus,
 }));
 
