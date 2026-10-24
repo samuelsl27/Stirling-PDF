@@ -4,9 +4,9 @@
  * detects them in the browser and names the modes a save can apply to the XFA half.
  */
 import { useEffect, useState } from "react";
-import { getDocumentBytes } from "@app/services/documentBytesCache";
-import { runPdfiumScan } from "@app/services/pdfiumScanQueue";
-import { readRawFormType } from "@app/services/pdfiumService";
+import { getDocumentBytes } from "@editor/services/documentBytesCache";
+import { runPdfiumScan } from "@editor/services/pdfiumScanQueue";
+import { readRawFormType } from "@editor/services/pdfiumService";
 
 /**
  * Opening a document copies all of it into wasm memory. No LiveCycle form is anywhere near this

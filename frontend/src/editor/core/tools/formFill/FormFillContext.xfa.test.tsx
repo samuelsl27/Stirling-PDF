@@ -8,9 +8,9 @@ import React from "react";
 import {
   FormFillProvider,
   useFormFill,
-} from "@app/tools/formFill/FormFillContext";
-import type { FormField } from "@app/tools/formFill/types";
-import { expectConsole } from "@app/tests/failOnConsole";
+} from "@editor/tools/formFill/FormFillContext";
+import type { FormField } from "@editor/tools/formFill/types";
+import { expectConsole } from "@editor/tests/failOnConsole";
 
 const applyFieldEdits = vi.fn();
 const syncXfaForm = vi.fn();
@@ -18,12 +18,12 @@ const fetchFields = vi.fn();
 const readFormType = vi.fn();
 const filled = new Blob(["filled by pdfium"], { type: "application/pdf" });
 
-vi.mock("@app/tools/formFill/formApi", () => ({
+vi.mock("@editor/tools/formFill/formApi", () => ({
   applyFieldEdits: (...args: unknown[]) => applyFieldEdits(...args),
   syncXfaForm: (...args: unknown[]) => syncXfaForm(...args),
 }));
 // Defined inside each factory: vi.mock is hoisted above any module-level binding.
-vi.mock("@app/tools/formFill/providers/PdfBoxFormProvider", () => ({
+vi.mock("@editor/tools/formFill/providers/PdfBoxFormProvider", () => ({
   PdfBoxFormProvider: class {
     fetchFields(...args: unknown[]) {
       return fetchFields(...args);
@@ -33,7 +33,7 @@ vi.mock("@app/tools/formFill/providers/PdfBoxFormProvider", () => ({
     }
   },
 }));
-vi.mock("@app/tools/formFill/providers/PdfiumFormProvider", () => ({
+vi.mock("@editor/tools/formFill/providers/PdfiumFormProvider", () => ({
   PdfiumFormProvider: class {
     fetchFields(...args: unknown[]) {
       return fetchFields(...args);
@@ -43,11 +43,11 @@ vi.mock("@app/tools/formFill/providers/PdfiumFormProvider", () => ({
     }
   },
 }));
-vi.mock("@app/services/pdfiumService", () => ({
+vi.mock("@editor/services/pdfiumService", () => ({
   fetchSignatureFieldsWithAppearances: vi.fn().mockResolvedValue([]),
 }));
-vi.mock("@app/tools/formFill/xfa", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@app/tools/formFill/xfa")>()),
+vi.mock("@editor/tools/formFill/xfa", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@editor/tools/formFill/xfa")>()),
   readFormType: (...args: unknown[]) => readFormType(...args),
 }));
 

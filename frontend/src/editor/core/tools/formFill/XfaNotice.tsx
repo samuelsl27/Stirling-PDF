@@ -5,12 +5,12 @@
  */
 import { Alert, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { Banner } from "@app/ui/Banner";
-import { Icon } from "@app/ui/Icon";
-import { RadioGroup } from "@app/ui/Radio";
-import { Select } from "@app/ui/Select";
-import { useFormFill } from "@app/tools/formFill/FormFillContext";
-import { useXfaKind, type XfaMode } from "@app/tools/formFill/xfa";
+import { Banner } from "@editor/ui/Banner";
+import { Icon } from "@editor/ui/Icon";
+import { RadioGroup } from "@editor/ui/Radio";
+import { Select } from "@editor/ui/Select";
+import { useFormFill } from "@editor/tools/formFill/FormFillContext";
+import { useXfaKind, type XfaMode } from "@editor/tools/formFill/xfa";
 
 interface XfaNoticeProps {
   file: File | Blob | null;

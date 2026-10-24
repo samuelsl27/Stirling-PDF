@@ -9,7 +9,7 @@ import {
   PDFString,
 } from "@cantoo/pdf-lib";
 import type { Page, Route } from "@playwright/test";
-import { test, expect } from "@app/tests/helpers/stub-test-base";
+import { test, expect } from "@editor/tests/helpers/stub-test-base";
 
 /**
  * Hybrid XFA forms (Adobe LiveCycle) with `/api/v1/form/*` mocked: the warning, the save-mode

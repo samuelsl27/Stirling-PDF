@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { classifyXfa, readFormType } from "@app/tools/formFill/xfa";
+import { classifyXfa, readFormType } from "@editor/tools/formFill/xfa";
 
 const readRawFormType = vi.fn();
 
-vi.mock("@app/services/pdfiumService", () => ({
+vi.mock("@editor/services/pdfiumService", () => ({
   readRawFormType: (...args: unknown[]) => readRawFormType(...args),
 }));
 
