@@ -10,6 +10,7 @@ import { tauriBackendService } from "@editor/services/tauriBackendService";
 import { endpointAvailabilityService } from "@editor/services/endpointAvailabilityService";
 import { selfHostedServerMonitor } from "@editor/services/selfHostedServerMonitor";
 import { STIRLING_SAAS_BACKEND_API_URL } from "@editor/constants/connection";
+import { isDeviceLocalEndpoint } from "@editor/constants/deviceLocalEndpoints";
 import {
   CONVERSION_ENDPOINTS,
   ENDPOINT_NAMES,
@@ -180,9 +181,32 @@ export class OperationRouter {
    * Enhanced with capability-based routing for tools not supported locally
    * @param operation - The operation endpoint path (for endpoint classification)
    * @param endpointName - Backend endpoint key, when the URL alone does not identify it
+   * @param deviceLocal - The request uses a key or store held on this machine
    * @returns Base URL for API calls
    */
-  async getBaseUrl(operation?: string, endpointName?: string): Promise<string> {
+  async getBaseUrl(
+    operation?: string,
+    endpointName?: string,
+    deviceLocal = false,
+  ): Promise<string> {
+    // Device-local work is settled before anything else, because no connection
+    // mode can change the answer: enumerating this machine's certificate store,
+    // or signing with a key held by a token plugged into it, has to happen here.
+    // Sent to a self-hosted server it would describe that server's hardware, or
+    // be rejected outright by HardwareKeyStoreService.assertLocalDesktop.
+    if (deviceLocal || isDeviceLocalEndpoint(operation)) {
+      const backendUrl = tauriBackendService.getBackendUrl();
+      if (!backendUrl) {
+        throw new Error(
+          "Backend URL not available - backend may still be starting",
+        );
+      }
+      console.debug(
+        `[operationRouter] Routing ${operation} to the local backend (device-local)`,
+      );
+      return backendUrl.replace(/\/$/, "");
+    }
+
     if (await isLocalProcessingOnly()) {
       if (operation && requiresOffDeviceProcessing(operation))
         throw documentPrivacyError();
@@ -208,6 +232,7 @@ export class OperationRouter {
     if (this.isServerAutomationEndpoint(operation)) {
       return this.getConnectedServerBaseUrl();
     }
+
     const mode = await connectionModeService.getCurrentMode();
 
     // Local-only mode: route everything to local backend; open settings if tool unavailable
