@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@editor/ui/Button";
 import { column, DataTable } from "@editor/ui/DataTable";
 import { HardwareCertificateInfo } from "@editor/services/hardwareSigningService";
+import { privateContentClassName } from "@editor/components/shared/privateContentClassName";
 import {
   byUsefulness,
   displayName,
@@ -134,6 +135,7 @@ const HardwareCertificateModal = ({
             "Search by name, issuer or serial number",
           )}
           disabled={loading}
+          className={privateContentClassName}
         />
 
         {error && (
@@ -150,27 +152,29 @@ const HardwareCertificateModal = ({
             </Text>
           </Group>
         ) : (
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(cert) => cert.alias}
-            onRowClick={(cert) => {
-              onSelect(cert);
-              onClose();
-            }}
-            // An expired certificate cannot produce a valid signature, so it is shown -
-            // knowing it is there and unusable beats wondering where it went - but not offered.
-            isRowInteractive={isUsable}
-            rowAffordance="chevron"
-            empty={
-              <Text size="sm" c="dimmed">
-                {t(
-                  "certSign.hardware.noCerts",
-                  "No signing certificates found",
-                )}
-              </Text>
-            }
-          />
+          <div className={privateContentClassName}>
+            <DataTable
+              columns={columns}
+              rows={rows}
+              rowKey={(cert) => cert.alias}
+              onRowClick={(cert) => {
+                onSelect(cert);
+                onClose();
+              }}
+              // An expired certificate cannot produce a valid signature, so it is shown -
+              // knowing it is there and unusable beats wondering where it went - but not offered.
+              isRowInteractive={isUsable}
+              rowAffordance="chevron"
+              empty={
+                <Text size="sm" c="dimmed">
+                  {t(
+                    "certSign.hardware.noCerts",
+                    "No signing certificates found",
+                  )}
+                </Text>
+              }
+            />
+          </div>
         )}
 
         <Group justify="space-between">

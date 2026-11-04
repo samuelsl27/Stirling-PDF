@@ -171,13 +171,24 @@ export class OperationRouter {
     return endpoint;
   }
 
+  /** The caller's endpoint key wins: one URL can serve several (PDF to text and to RTF). */
+  private capabilityKey(operation: string, endpointName?: string): string {
+    return endpointName || this.extractEndpointName(operation);
+  }
+
   /**
    * Gets the base URL for an operation based on execution target
    * Enhanced with capability-based routing for tools not supported locally
    * @param operation - The operation endpoint path (for endpoint classification)
+   * @param endpointName - Backend endpoint key, when the URL alone does not identify it
+   * @param deviceLocal - The request uses a key or store held on this machine
    * @returns Base URL for API calls
    */
-  async getBaseUrl(operation?: string, deviceLocal = false): Promise<string> {
+  async getBaseUrl(
+    operation?: string,
+    endpointName?: string,
+    deviceLocal = false,
+  ): Promise<string> {
     // Device-local work is settled before anything else, because no connection
     // mode can change the answer: enumerating this machine's certificate store,
     // or signing with a key held by a token plugged into it, has to happen here.
@@ -209,7 +220,7 @@ export class OperationRouter {
           operation &&
           this.isToolEndpoint(operation) &&
           !(await endpointAvailabilityService.isEndpointSupportedLocally(
-            this.extractEndpointName(operation),
+            this.capabilityKey(operation, endpointName),
             localUrl,
           ))
         ) {
@@ -227,12 +238,12 @@ export class OperationRouter {
     // Local-only mode: route everything to local backend; open settings if tool unavailable
     if (mode === "local") {
       if (operation && this.isToolEndpoint(operation)) {
-        const endpointName = this.extractEndpointName(operation);
+        const endpointToCheck = this.capabilityKey(operation, endpointName);
         const backendUrl = tauriBackendService.getBackendUrl();
         if (backendUrl) {
           const supportedLocally =
             await endpointAvailabilityService.isEndpointSupportedLocally(
-              endpointName,
+              endpointToCheck,
               backendUrl,
             );
           if (!supportedLocally) {
@@ -274,7 +285,7 @@ export class OperationRouter {
     // NEW: Check if local backend supports this tool endpoint
     if (mode === "saas" && operation && this.isToolEndpoint(operation)) {
       // Extract endpoint name for capability check (e.g., "/api/v1/misc/repair" -> "repair")
-      const endpointToCheck = this.extractEndpointName(operation);
+      const endpointToCheck = this.capabilityKey(operation, endpointName);
       console.debug(
         `[operationRouter] Checking capability for ${operation} -> endpoint name: ${endpointToCheck}`,
       );
@@ -343,12 +354,12 @@ export class OperationRouter {
     if (mode === "selfhosted" && operation && this.isToolEndpoint(operation)) {
       const { status } = selfHostedServerMonitor.getSnapshot();
       if (status === "offline") {
-        const endpointName = this.extractEndpointName(operation);
+        const endpointToCheck = this.capabilityKey(operation, endpointName);
         const localUrl = tauriBackendService.getBackendUrl();
         if (localUrl) {
           const supportedLocally =
             await endpointAvailabilityService.isEndpointSupportedLocally(
-              endpointName,
+              endpointToCheck,
               localUrl,
             );
           if (supportedLocally) {
@@ -362,7 +373,7 @@ export class OperationRouter {
           i18n.t(
             "selfHosted.offline.toolNotAvailableLocally",
             'Your Stirling-PDF server is offline and "{{endpoint}}" is not available on the local backend.',
-            { endpoint: endpointName },
+            { endpoint: endpointToCheck },
           ),
         );
       }
@@ -415,9 +426,13 @@ export class OperationRouter {
    * Returns true if the endpoint routes to SaaS backend (not local backend)
    * Enhanced to support capability-based routing
    * @param endpoint - The endpoint path to check
+   * @param endpointName - Backend endpoint key, when the URL alone does not identify it
    * @returns Promise<boolean> - true if endpoint should skip backend readiness check
    */
-  async shouldSkipBackendReadyCheck(endpoint?: string): Promise<boolean> {
+  async shouldSkipBackendReadyCheck(
+    endpoint?: string,
+    endpointName?: string,
+  ): Promise<boolean> {
     if (await isLocalProcessingOnly())
       return Boolean(
         endpoint &&
@@ -437,7 +452,7 @@ export class OperationRouter {
       const backendUrl = tauriBackendService.getBackendUrl();
       // Backend not ready — don't skip the readiness check; let it gate the request.
       if (!backendUrl || !tauriBackendService.isOnline) return false;
-      const endpointToCheck = this.extractEndpointName(endpoint);
+      const endpointToCheck = this.capabilityKey(endpoint, endpointName);
       const supportedLocally =
         await endpointAvailabilityService.isEndpointSupportedLocally(
           endpointToCheck,

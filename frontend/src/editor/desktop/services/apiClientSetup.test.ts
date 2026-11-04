@@ -226,6 +226,7 @@ describe("desktop request interceptor - auth for SaaS-backend requests", () => {
     url: string;
     method: string;
     headers: Record<string, string>;
+    endpointName?: string;
   };
 
   async function runRequestInterceptor(config: ReqConfig): Promise<ReqConfig> {
@@ -280,6 +281,24 @@ describe("desktop request interceptor - auth for SaaS-backend requests", () => {
         headers: {},
       }),
     ).rejects.toThrow("Sign in required");
+  });
+
+  test("routes by the request's endpoint key when it carries one", async () => {
+    await runRequestInterceptor({
+      url: "/api/v1/convert/pdf/text",
+      method: "post",
+      headers: {},
+      endpointName: "pdf-to-rtf",
+    });
+    expect(operationRouter.getBaseUrl).toHaveBeenCalledWith(
+      "/api/v1/convert/pdf/text",
+      "pdf-to-rtf",
+      false,
+    );
+    expect(operationRouter.shouldSkipBackendReadyCheck).toHaveBeenCalledWith(
+      "/api/v1/convert/pdf/text",
+      "pdf-to-rtf",
+    );
   });
 });
 
@@ -348,6 +367,7 @@ describe("desktop request interceptor - device-local requests", () => {
 
     expect(operationRouter.getBaseUrl).toHaveBeenCalledWith(
       "/api/v1/security/cert-sign",
+      undefined,
       true,
     );
   });

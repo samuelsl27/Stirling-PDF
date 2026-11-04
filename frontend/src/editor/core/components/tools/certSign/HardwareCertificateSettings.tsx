@@ -24,6 +24,7 @@ import {
   validityOf,
 } from "@editor/utils/certSign/hardwareCertificateDisplay";
 import HardwareCertificateModal from "@editor/components/tools/certSign/modals/HardwareCertificateModal";
+import { privateContentClassName } from "@editor/components/shared/privateContentClassName";
 
 interface HardwareCertificateSettingsProps {
   parameters: CertSignParameters;
@@ -145,7 +146,7 @@ const HardwareCertificateSettings = ({
       const issuer = distinctIssuer(selected);
       const validity = validityOf(selected);
       return (
-        <Stack gap={2}>
+        <Stack gap={2} className={privateContentClassName}>
           <Text size="sm" fw={600}>
             {displayName(selected)}
           </Text>
@@ -166,7 +167,11 @@ const HardwareCertificateSettings = ({
     }
     if (parameters.alias) {
       return (
-        <Text size="sm" style={{ wordBreak: "break-all" }}>
+        <Text
+          size="sm"
+          style={{ wordBreak: "break-all" }}
+          className={privateContentClassName}
+        >
           {parameters.alias}
         </Text>
       );
