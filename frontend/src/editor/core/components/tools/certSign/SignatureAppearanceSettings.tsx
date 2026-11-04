@@ -87,6 +87,7 @@ const SignaturePlacementPickerForTool = (props: PlacementPickerProps) => {
     />
   );
 };
+import { privateContentClassName } from "@editor/components/shared/privateContentClassName";
 
 interface SignatureAppearanceSettingsProps {
   parameters: CertSignParameters;
@@ -223,6 +224,7 @@ const SignatureAppearanceSettings = ({
           <TextInput
             label={t("certSign.reason", "Reason")}
             value={parameters.reason}
+            className={privateContentClassName}
             onChange={(event) =>
               onParameterChange("reason", event.currentTarget.value)
             }
@@ -231,6 +233,7 @@ const SignatureAppearanceSettings = ({
           <TextInput
             label={t("certSign.location", "Location")}
             value={parameters.location}
+            className={privateContentClassName}
             onChange={(event) =>
               onParameterChange("location", event.currentTarget.value)
             }
@@ -243,6 +246,7 @@ const SignatureAppearanceSettings = ({
               "Saved in the signature's details. The visible signature shows the name on the certificate.",
             )}
             value={parameters.name}
+            className={privateContentClassName}
             onChange={(event) =>
               onParameterChange("name", event.currentTarget.value)
             }

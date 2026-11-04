@@ -73,12 +73,16 @@ export function setupApiInterceptors(client: AxiosInstance): void {
 
       const skipCheck = extendedConfig.skipBackendReadyCheck === true;
       const skipForSaaSBackend =
-        await operationRouter.shouldSkipBackendReadyCheck(originalUrl);
+        await operationRouter.shouldSkipBackendReadyCheck(
+          originalUrl,
+          extendedConfig.endpointName,
+        );
 
       try {
         // Get the appropriate base URL for this request
         const baseUrl = await operationRouter.getBaseUrl(
           originalUrl,
+          extendedConfig.endpointName,
           extendedConfig.deviceLocal === true,
         );
 

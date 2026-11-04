@@ -427,7 +427,8 @@ class OcrRuntimeServiceTest {
         @Test
         @DisplayName("a catalogue host that does not resolve is external, not a mirror")
         void unresolvableCatalogueIsNotTreatedAsAMirror() throws IOException {
-            // The regression this pins: asking isSensitiveHost whether the catalogue was internal
+            // The regression this pins: asking isDisallowedNetworkLocation whether the catalogue
+            // was internal
             // conflated "resolves inside" with "cannot be resolved at all", so a DNS failure on the
             // catalogue host read as "internal mirror" and switched the guard off entirely.
             OcrRuntimeService svc =

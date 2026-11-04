@@ -48,17 +48,16 @@ const LanguagePicker: React.FC<LanguagePickerProps> = ({
   const [installedRevision, setInstalledRevision] = useState(0);
 
   useEffect(() => {
-    // Each change below starts another fetch while an earlier one may still be
-    // out, and a list that comes back late must not replace a newer one.
-    let superseded = false;
-
+    let cancelled = false;
     // Fetch available languages from backend
     const fetchLanguages = async () => {
       try {
         const { data } = await apiClient.get<{ languages: string[] }>(
           languagesEndpoint,
         );
-        if (superseded) return;
+        if (cancelled) {
+          return;
+        }
 
         const displayNames =
           typeof Intl.DisplayNames !== "undefined"
@@ -95,7 +94,9 @@ const LanguagePicker: React.FC<LanguagePickerProps> = ({
 
         setAvailableLanguages(languageOptions);
       } catch (error) {
-        if (superseded) return;
+        if (cancelled) {
+          return;
+        }
         console.error("[LanguagePicker] Fetch failed with error:", error);
         console.error("[LanguagePicker] Error details:", {
           name: error instanceof Error ? error.name : "Unknown",
@@ -103,13 +104,15 @@ const LanguagePicker: React.FC<LanguagePickerProps> = ({
           stack: error instanceof Error ? error.stack : undefined,
         });
       } finally {
-        if (!superseded) setIsLoadingLanguages(false);
+        if (!cancelled) {
+          setIsLoadingLanguages(false);
+        }
       }
     };
 
     fetchLanguages();
     return () => {
-      superseded = true;
+      cancelled = true;
     };
   }, [languagesEndpoint, i18n.language, t, installedRevision]);
 

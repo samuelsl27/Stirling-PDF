@@ -557,7 +557,7 @@ public class OcrRuntimeService {
             return;
         }
         String host = uri.getHost();
-        if (host == null || GeneralUtils.isSensitiveHost(host)) {
+        if (host == null || GeneralUtils.isDisallowedNetworkLocation(host)) {
             throw new IOException(
                     "Refusing to fetch OCR components from a host the server must not reach: "
                             + host);
@@ -567,12 +567,12 @@ public class OcrRuntimeService {
     /**
      * Whether the configured catalogue is itself an internal mirror.
      *
-     * <p>Deliberately <em>not</em> {@code GeneralUtils.isSensitiveHost}. That one answers "should I
-     * refuse to contact this?" and so reports true when a name fails to resolve, which is right for
-     * blocking and wrong here: reusing it meant a catalogue host that simply did not resolve was
-     * read as "internal mirror" and switched the guard off altogether. A DNS failure must not open
-     * the hole it is there to close, so this only says yes when the host really does resolve
-     * inside.
+     * <p>Deliberately <em>not</em> {@code GeneralUtils.isDisallowedNetworkLocation}. That one
+     * answers "should I refuse to contact this?" and so reports true when a name fails to resolve,
+     * which is right for blocking and wrong here: reusing it meant a catalogue host that simply did
+     * not resolve was read as "internal mirror" and switched the guard off altogether. A DNS
+     * failure must not open the hole it is there to close, so this only says yes when the host
+     * really does resolve inside.
      */
     private boolean catalogueIsInternal() {
         try {
