@@ -3,6 +3,12 @@ name = "stirling-ocr-setup"
 version = "0.1.0"
 edition = "2021"
 
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+all = "deny"
+
 # A DLL, not an executable, and that is forced by the requirement rather than a
 # preference: an MSI custom action of type EXE runs out of process and never
 # receives the installer session handle, so it cannot move the progress bar. A

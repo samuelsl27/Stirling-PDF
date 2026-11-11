@@ -190,24 +190,31 @@ describe("textTag", () => {
   }
 
   test("gives text the block it belongs to", async () => {
-    const tagged = (role: string, cannotRetag: string | null) => ({
+    const tagged = (
+      role: string,
+      cannotRetag: string | null,
+      canBeArtifact: boolean,
+    ) => ({
       kind: "tagged",
       block: { role, type: role },
       cannotRetag,
+      canBeArtifact,
     });
     expect(await tagOf(paragraphsPdf(), "Introduction")).toEqual(
-      tagged("H1", null),
+      tagged("H1", null, true),
     );
-    expect(await tagOf(paragraphsPdf(), "guide")).toEqual(tagged("P", null));
+    expect(await tagOf(paragraphsPdf(), "guide")).toEqual(
+      tagged("P", null, false),
+    );
     expect(await tagOf(paragraphsPdf(), "Item")).toEqual(
-      tagged("LI", "not-text"),
+      tagged("LI", "not-text", false),
     );
   });
 
-  test("reads text in a file without a structure tree as untagged", async () => {
+  test("reads text marked with an MCID the file has no tree for as untagged", async () => {
     expect(
       await tagOf(paragraphsPdf({ tagged: false }), "Introduction"),
-    ).toEqual({ kind: "untagged", documentTagged: false, taggable: false });
+    ).toEqual({ kind: "untagged", documentTagged: true, taggable: false });
   });
 });
 

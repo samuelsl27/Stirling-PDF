@@ -6,6 +6,8 @@ import PreferencesSection, {
 } from "@editor/components/shared/config/configSections/preferences/PreferencesSection";
 import AboutSection from "@editor/components/shared/config/configSections/AboutSection";
 import OcrSection from "@editor/components/shared/config/configSections/OcrSection";
+import FeedbackSection from "@editor/components/shared/config/configSections/FeedbackSection";
+import { useFeedback } from "@editor/hooks/useFeedback";
 import type {
   ConfigNavItem,
   ConfigNavSection,
@@ -32,6 +34,18 @@ export const PREFERENCES_ITEM_KEY = "general";
  * The Preferences group. A plain builder rather than a hook so the SaaS nav,
  * which is assembled outside a component, renders the same page.
  */
+/** Settings page for feedback; include it only when `useFeedback` offers a way to send it. */
+export function createFeedbackNavItem(
+  t: TFunction<"translation", undefined>,
+): ConfigNavItem {
+  return {
+    key: "feedback",
+    label: t("settings.feedback.label", "Feedback"),
+    icon: "message-square",
+    component: <FeedbackSection />,
+  };
+}
+
 export function createPreferencesNavSection(
   t: TFunction<"translation", undefined>,
   props: PreferencesSectionProps = {},
@@ -90,6 +104,7 @@ export const useConfigNavSections = (
   _showSettingsWhenNoLogin: boolean = true,
 ): ConfigNavSection[] => {
   const { t } = useTranslation();
+  const feedbackAvailable = useFeedback() !== null;
 
   const preferences = createPreferencesNavSection(t);
   const sections: ConfigNavSection[] = [
@@ -123,6 +138,7 @@ export const useConfigNavSections = (
             <AboutSection isAdmin={_isAdmin} onRequestClose={onRequestClose} />
           ),
         },
+        ...(feedbackAvailable ? [createFeedbackNavItem(t)] : []),
       ],
     },
   ];
