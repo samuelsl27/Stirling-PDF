@@ -5,6 +5,7 @@ import PreferencesSection, {
   type PreferencesSectionProps,
 } from "@editor/components/shared/config/configSections/preferences/PreferencesSection";
 import AboutSection from "@editor/components/shared/config/configSections/AboutSection";
+import OcrSection from "@editor/components/shared/config/configSections/OcrSection";
 import FeedbackSection from "@editor/components/shared/config/configSections/FeedbackSection";
 import { useFeedback } from "@editor/hooks/useFeedback";
 import type {
@@ -105,8 +106,20 @@ export const useConfigNavSections = (
   const { t } = useTranslation();
   const feedbackAvailable = useFeedback() !== null;
 
+  const preferences = createPreferencesNavSection(t);
   const sections: ConfigNavSection[] = [
-    createPreferencesNavSection(t),
+    {
+      ...preferences,
+      items: [
+        ...preferences.items,
+        {
+          key: "ocr",
+          label: t("settings.ocr.title", "Text recognition"),
+          icon: "scan-text",
+          component: <OcrSection />,
+        },
+      ],
+    },
     // Reference material: read once and rarely revisited, so it is one page
     // rather than four rows you have to open in turn.
     {

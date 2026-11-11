@@ -482,6 +482,12 @@
       "description": "A free, private PDF editor you can run on any infrastructure.",
       "noindex": true
     },
+    "/settings/ocr": {
+      "image": "/og_images/home.png",
+      "title": "OCR Settings - Stirling PDF",
+      "description": "A free, private PDF editor you can run on any infrastructure.",
+      "noindex": true
+    },
     "/settings/adminGeneral": {
       "image": "/og_images/home.png",
       "title": "Admin General Settings - Stirling PDF",
@@ -918,6 +924,7 @@
     "/settings/api-keys": "/settings/api-keys",
     "/settings/connectedAccounts": "/settings/connectedAccounts",
     "/settings/hotkeys": "/settings/hotkeys",
+    "/settings/ocr": "/settings/ocr",
     "/settings/adminGeneral": "/settings/adminGeneral",
     "/settings/adminSecurity": "/settings/adminSecurity",
     "/settings/adminConnections": "/settings/adminConnections",
