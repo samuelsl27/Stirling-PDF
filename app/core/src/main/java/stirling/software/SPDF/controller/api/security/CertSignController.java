@@ -136,9 +136,10 @@ public class CertSignController {
     }
 
     /**
-     * Signs {@code input} into {@code output} without a positioned box, keeping the historical
-     * appearance and placement. Failures propagate: {@code output} may hold partial bytes
-     * afterwards, and catching them here would let the endpoint answer 200 with an empty PDF.
+     * Signs {@code input} into {@code output}. Failures propagate: {@code output} may hold partial
+     * bytes afterwards, and catching them here would let the endpoint answer 200 with an empty PDF.
+     *
+     * <p>This overload has no positioned box and keeps the historical appearance and placement.
      */
     public static void sign(
             CustomPDFDocumentFactory pdfDocumentFactory,
