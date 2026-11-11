@@ -135,7 +135,11 @@ public class CertSignController {
         this.hardwareKeyStoreService = hardwareKeyStoreService;
     }
 
-    /** Signs without a positioned box, keeping the historical appearance and placement. */
+    /**
+     * Signs {@code input} into {@code output} without a positioned box, keeping the historical
+     * appearance and placement. Failures propagate: {@code output} may hold partial bytes
+     * afterwards, and catching them here would let the endpoint answer 200 with an empty PDF.
+     */
     public static void sign(
             CustomPDFDocumentFactory pdfDocumentFactory,
             MultipartFile input,
@@ -427,7 +431,7 @@ public class CertSignController {
         }
         // Return the signed PDF
         return WebResponseUtils.pdfFileToWebResponse(
-                signedOut, GeneralUtils.generateFilename(pdf.getOriginalFilename(), "_signed.pdf"));
+                signedOut, GeneralUtils.generateFilename(pdf.getOriginalFilename(), ".pdf"));
     }
 
     private MultipartFile validateFilePresent(

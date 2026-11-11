@@ -233,6 +233,31 @@ class CertSignControllerTest {
     }
 
     @Test
+    void testSignPdfFailureIsNotAnsweredWithEmptyPdf() {
+        MockMultipartFile notAPdf =
+                new MockMultipartFile(
+                        "fileInput",
+                        "test.pdf",
+                        MediaType.APPLICATION_PDF_VALUE,
+                        "not a pdf".getBytes());
+        MockMultipartFile pfxFile =
+                new MockMultipartFile("p12File", "test-cert.pfx", "application/x-pkcs12", pfxBytes);
+
+        SignPDFWithCertRequest request = new SignPDFWithCertRequest();
+        request.setFileInput(notAPdf);
+        request.setCertType("PFX");
+        request.setP12File(pfxFile);
+        request.setPassword("password");
+        request.setShowSignature(false);
+        request.setReason("test");
+        request.setPageNumber(1);
+
+        assertThrows(
+                java.io.IOException.class,
+                () -> certSignController.signPDFWithCert(request, httpRequest));
+    }
+
+    @Test
     void testSignPdfWithPkcs12() throws Exception {
         MockMultipartFile pdfFile =
                 new MockMultipartFile(

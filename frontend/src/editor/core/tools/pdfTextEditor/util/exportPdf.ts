@@ -4,10 +4,16 @@ import {
   StructureEditError,
   applyStructureEdits,
 } from "@editor/tools/pdfTextEditor/pdfdoc/passes/applyStructureEdits";
+import {
+  MarkInfoError,
+  applyMarked,
+} from "@editor/tools/pdfTextEditor/pdfdoc/passes/markTagged";
+import { nameArtifactKinds } from "@editor/tools/pdfTextEditor/pdfdoc/passes/nameArtifactKinds";
 import { repairStructure } from "@editor/tools/pdfTextEditor/pdfdoc/passes/repairStructure";
 import { setDocumentLanguage } from "@editor/tools/pdfTextEditor/pdfdoc/passes/setDocumentLanguage";
 import { preserveShadings } from "@editor/tools/pdfTextEditor/pdfdoc/passes/preserveShadings";
 import { PdfiumSave } from "@editor/tools/pdfTextEditor/pdfium/PdfiumSave";
+import { writesArtifactKinds } from "@editor/tools/pdfTextEditor/pdfium/PdfiumTagMarks";
 import {
   assertIncrementalAppend,
   assertSavedPdf,
@@ -32,7 +38,11 @@ export async function exportToBlob(
     // starting from what we opened keeps the file byte-identical. Rewriting it
     // changed the bytes of 8 of this suite's 10 fixtures and inflated the small
     // ones by up to 35% - for no edit at all.
-    if (structureEdits.length === 0 && documentLanguage === undefined) {
+    if (
+      structureEdits.length === 0 &&
+      documentLanguage === undefined &&
+      !doc.markedTaggedChanged()
+    ) {
       return {
         blob: pdfBlob(doc.openedBytes),
         filename: exportName(sourceName),
@@ -41,6 +51,11 @@ export async function exportToBlob(
     bytes = doc.openedBytes;
   } else {
     bytes = await serializeEdits(doc, incremental);
+    try {
+      bytes = await nameArtifactKinds(bytes, pagesWritingArtifactKinds(doc));
+    } catch (err) {
+      throw accessibilitySaveFailed(err);
+    }
   }
 
   // Throws rather than dropping them: a description the user wrote that the
@@ -55,6 +70,14 @@ export async function exportToBlob(
     try {
       bytes = await setDocumentLanguage(bytes, documentLanguage);
     } catch (err) {
+      throw accessibilitySaveFailed(err);
+    }
+  }
+  if (doc.markedTaggedChanged()) {
+    try {
+      bytes = await applyMarked(bytes, doc.markedTagged());
+    } catch (err) {
+      if (!(err instanceof MarkInfoError)) throw err;
       throw accessibilitySaveFailed(err);
     }
   }
@@ -82,6 +105,16 @@ export async function exportToBlob(
   if (incremental) assertIncrementalAppend(bytes, doc.openedBytes);
 
   return { blob: pdfBlob(bytes), filename: exportName(sourceName) };
+}
+
+function pagesWritingArtifactKinds(doc: EditorDocument): number[] {
+  return doc
+    .loadedPages()
+    .filter(
+      (page) =>
+        page.regenerated && writesArtifactKinds(doc.module, page.pagePtr),
+    )
+    .map((page) => page.index);
 }
 
 function accessibilitySaveFailed(cause: unknown): Error {
