@@ -114,6 +114,7 @@ tasks:
       - task: lint:app
       - task: lint:provisioner
       - task: lint:thumbnail-handler
+      - task: lint:ocr-setup
 
   lint:app:
     desc: "Lint the Tauri app crate"
@@ -136,6 +137,13 @@ tasks:
     desc: "Lint the Windows thumbnail handler crate"
     platforms: [windows]
     dir: src-tauri/thumbnail-handler
+    cmds:
+      - cargo clippy --all-targets -- -D warnings
+
+  lint:ocr-setup:
+    desc: "Lint the Windows OCR setup custom action crate"
+    platforms: [windows]
+    dir: src-tauri/ocr-setup
     cmds:
       - cargo clippy --all-targets -- -D warnings
 
