@@ -486,6 +486,7 @@ class FileStorageService {
       remoteSharedViaLink: stub.remoteSharedViaLink,
       remoteHasShareLinks: stub.remoteHasShareLinks,
       remoteShareToken: stub.remoteShareToken,
+      cloudOrigin: stub.cloudOrigin,
 
       // History data from stub
       versionNumber: stub.versionNumber ?? 1,
@@ -986,6 +987,7 @@ class FileStorageService {
           isDirty: record.isDirty,
           isLeaf: record.isLeaf,
           remoteStorageId: record.remoteStorageId,
+          cloudOrigin: record.cloudOrigin,
           remoteStorageUpdatedAt: record.remoteStorageUpdatedAt,
           remoteOwnerUsername: record.remoteOwnerUsername,
           remoteOwnedByCurrentUser: record.remoteOwnedByCurrentUser,
@@ -1093,6 +1095,7 @@ class FileStorageService {
               isDirty: record.isDirty,
               isLeaf: record.isLeaf,
               remoteStorageId: record.remoteStorageId,
+              cloudOrigin: record.cloudOrigin,
               remoteStorageUpdatedAt: record.remoteStorageUpdatedAt,
               remoteOwnerUsername: record.remoteOwnerUsername,
               remoteOwnedByCurrentUser: record.remoteOwnedByCurrentUser,
@@ -1209,6 +1212,7 @@ class FileStorageService {
               isDirty: record.isDirty,
               isLeaf: record.isLeaf,
               remoteStorageId: record.remoteStorageId,
+              cloudOrigin: record.cloudOrigin,
               remoteStorageUpdatedAt: record.remoteStorageUpdatedAt,
               remoteOwnerUsername: record.remoteOwnerUsername,
               remoteOwnedByCurrentUser: record.remoteOwnedByCurrentUser,

@@ -1,5 +1,4 @@
 import apiClient from "@editor/services/apiClient";
-import { applyDeviceCapabilities } from "@editor/api/appConfigExtensions";
 import { getSimulatedAppConfig } from "@editor/testing/serverExperienceSimulations";
 import type { AppConfig } from "@editor/types/appConfig";
 import type { EndpointAvailabilityDetails } from "@editor/types/endpointAvailability";
@@ -7,16 +6,17 @@ import type { EndpointAvailabilityDetails } from "@editor/types/endpointAvailabi
 /** Unauthenticated and unreachable both mean "assume login is on". */
 export const DEFAULT_APP_CONFIG: AppConfig = { enableLogin: true };
 
-export async function fetchAppConfig(): Promise<AppConfig> {
+/** `baseUrl` names another server than this app's own backend. */
+export async function fetchAppConfig(baseUrl = ""): Promise<AppConfig> {
   const simulated = getSimulatedAppConfig();
   if (simulated) return simulated;
 
   try {
     const response = await apiClient.get<AppConfig>(
-      "/api/v1/config/app-config",
+      `${baseUrl}/api/v1/config/app-config`,
       { suppressErrorToast: true, skipAuthRedirect: true },
     );
-    return applyDeviceCapabilities(response.data);
+    return response.data;
   } catch (error) {
     // 401 is an answer, not a failure: the app runs unauthenticated.
     if ((error as { response?: { status?: number } })?.response?.status === 401)

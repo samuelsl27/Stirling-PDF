@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 // Verifies operationRouter.getBaseUrl host selection in SaaS mode: cloud-only
 // feature endpoints (payg/team/policies) must hit the SaaS backend, NOT the local
@@ -40,7 +40,6 @@ vi.mock("@editor/services/tauriBackendService", () => ({
 vi.mock("@editor/services/endpointAvailabilityService", () => ({
   endpointAvailabilityService: {
     isEndpointSupportedLocally: vi.fn().mockResolvedValue(true),
-    isEndpointSupportedOnSaaS: vi.fn().mockResolvedValue(true),
   },
 }));
 vi.mock("@editor/services/selfHostedServerMonitor", () => ({
@@ -123,9 +122,6 @@ describe("managed local document processing", () => {
     vi.mocked(
       endpointAvailabilityService.isEndpointSupportedLocally,
     ).mockResolvedValue(true);
-    vi.mocked(
-      endpointAvailabilityService.isEndpointSupportedOnSaaS,
-    ).mockClear();
   });
   test.each(["saas", "selfhosted", "local"] as const)(
     "processes supported tools locally in %s mode",
@@ -134,9 +130,6 @@ describe("managed local document processing", () => {
       await expect(
         operationRouter.getBaseUrl("/api/v1/misc/compress-pdf"),
       ).resolves.toBe("http://localhost:62994");
-      expect(
-        endpointAvailabilityService.isEndpointSupportedOnSaaS,
-      ).not.toHaveBeenCalled();
     },
   );
   test("does not fall back to SaaS when a tool is missing locally", async () => {
@@ -146,9 +139,6 @@ describe("managed local document processing", () => {
     await expect(
       operationRouter.getBaseUrl("/api/v1/misc/ocr-pdf"),
     ).rejects.toThrow("stay on this device");
-    expect(
-      endpointAvailabilityService.isEndpointSupportedOnSaaS,
-    ).not.toHaveBeenCalled();
     await expect(
       operationRouter.willRouteToSaaS("/api/v1/misc/ocr-pdf"),
     ).resolves.toBe(false);
@@ -200,91 +190,6 @@ describe("operationRouter.getBaseUrl — SaaS mode cloud-only routing", () => {
   });
 });
 
-// Hardware-backed signing reads the certificate store of the machine the user is
-// on, so those calls have to reach the bundled backend whatever the app is
-// connected to. Answered by a self-hosted server they describe its hardware, or
-// are rejected outright — which is what hid "This device" as a signing source
-// while connected to a server (#7316).
-describe("operationRouter.getBaseUrl — device-local endpoints", () => {
-  const LOCAL_URL = "http://localhost:62994";
-
-  // The server-owned automation suite leaves an offline self-hosted server
-  // behind, which would send the unmarked signing call to the local fallback.
-  beforeEach(() => {
-    vi.mocked(connectionModeService.getServerConfig).mockResolvedValue({
-      url: SAAS_URL,
-    });
-    vi.mocked(selfHostedServerMonitor.getSnapshot).mockReturnValue({
-      status: "online",
-      isOnline: true,
-      serverUrl: SAAS_URL,
-    });
-  });
-
-  test.each(["local", "saas", "selfhosted"] as const)(
-    "hardware capabilities stay local in %s mode",
-    async (mode) => {
-      vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(mode);
-
-      await expect(
-        operationRouter.getBaseUrl(
-          "/api/v1/security/cert-sign/hardware/capabilities",
-        ),
-      ).resolves.toBe(LOCAL_URL);
-    },
-  );
-
-  test("certificate enumeration stays local in self-hosted mode", async () => {
-    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(
-      "selfhosted",
-    );
-
-    await expect(
-      operationRouter.getBaseUrl(
-        "/api/v1/security/cert-sign/hardware/windows-certificates",
-      ),
-    ).resolves.toBe(LOCAL_URL);
-  });
-
-  test("a request marked device-local stays local even on a shared path", async () => {
-    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(
-      "selfhosted",
-    );
-
-    // Signing posts to the same path whichever certificate was chosen, so only
-    // the caller's mark can say the key lives on this machine.
-    await expect(
-      operationRouter.getBaseUrl("/api/v1/security/cert-sign", undefined, true),
-    ).resolves.toBe(LOCAL_URL);
-  });
-
-  test("the same signing path still goes to the server unmarked", async () => {
-    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(
-      "selfhosted",
-    );
-
-    // The regression that matters: an uploaded keystore must keep running on the
-    // server, or this fix would quietly move everyone's signing onto the desktop.
-    await expect(
-      operationRouter.getBaseUrl("/api/v1/security/cert-sign"),
-    ).resolves.toBe(SAAS_URL);
-  });
-
-  test("the app-config still comes from the server in self-hosted mode", async () => {
-    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(
-      "selfhosted",
-    );
-
-    // Deliberately left alone, and the reason the desktop re-answers
-    // hardwareSigningAvailable for itself rather than routing this call locally:
-    // the rest of the config describes the deployment - which tools are on, how
-    // login works - and there the server is the authority.
-    await expect(
-      operationRouter.getBaseUrl("/api/v1/config/app-config"),
-    ).resolves.toBe(SAAS_URL);
-  });
-});
-
 describe("operationRouter — URL shared by two endpoint keys", () => {
   const url = "/api/v1/convert/pdf/text";
 
@@ -309,5 +214,122 @@ describe("operationRouter — URL shared by two endpoint keys", () => {
     } finally {
       supportedLocally.mockResolvedValue(true);
     }
+  });
+});
+
+describe("operationRouter — Office Convert needs an account", () => {
+  const dispatchEvent = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal("window", { dispatchEvent });
+    dispatchEvent.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  test.each([
+    ["/api/v1/convert/file/pdf", undefined],
+    ["/api/v1/convert/pdf/word", undefined],
+    ["/api/v1/convert/pdf/text", "pdf-to-rtf"],
+    ["/api/v1/misc/extract-image-scans", undefined],
+  ])("refuses %s (%s) in local mode and opens sign-in", async (url, key) => {
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue("local");
+    await expect(operationRouter.getBaseUrl(url, key)).rejects.toThrow(
+      /requires an account/,
+    );
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test("still runs free conversions locally in local mode", async () => {
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue("local");
+    await expect(
+      operationRouter.getBaseUrl("/api/v1/convert/pdf/img"),
+    ).resolves.toBe("http://localhost:62994");
+    for (const path of [
+      "/api/v1/convert/pdf/csv",
+      "/api/v1/convert/pdf/text",
+      "/api/v1/convert/pdf/xlsx",
+      "/api/v1/convert/pdf/markdown",
+    ]) {
+      await expect(operationRouter.getBaseUrl(path)).resolves.toBe(
+        "http://localhost:62994",
+      );
+    }
+    expect(dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  test("badges Office Convert tools as needing sign-in only in local mode", async () => {
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue("local");
+    await expect(
+      operationRouter.willRouteToSaaS("/api/v1/misc/extract-image-scans"),
+    ).resolves.toBe(true);
+    await expect(
+      operationRouter.willRouteToSaaS("/api/v1/misc/compress-pdf"),
+    ).resolves.toBe(false);
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue("saas");
+    await expect(
+      operationRouter.willRouteToSaaS("/api/v1/misc/extract-image-scans"),
+    ).resolves.toBe(false);
+  });
+
+  test("runs Office Convert on the bundled backend once signed in", async () => {
+    await expect(
+      operationRouter.getBaseUrl("/api/v1/convert/file/pdf"),
+    ).resolves.toBe("http://localhost:62994");
+  });
+});
+
+describe("operationRouter — server signing never falls back", () => {
+  const certSign = "/api/v1/security/cert-sign";
+
+  beforeEach(() => {
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue(
+      "selfhosted",
+    );
+    vi.mocked(connectionModeService.getServerConfig).mockResolvedValue({
+      url: "https://selfhosted.test/",
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(selfHostedServerMonitor.getSnapshot).mockReturnValue({
+      status: "online",
+      isOnline: true,
+      serverUrl: "https://selfhosted.test",
+    });
+  });
+
+  test("fails instead of using the bundled backend when the server is offline", async () => {
+    vi.mocked(selfHostedServerMonitor.getSnapshot).mockReturnValue({
+      status: "offline",
+      isOnline: false,
+      serverUrl: "https://selfhosted.test",
+    });
+    await expect(operationRouter.getBaseUrl(certSign)).resolves.toBe(
+      "http://localhost:62994",
+    );
+    await expect(
+      operationRouter.getServerOnlyBaseUrl(certSign),
+    ).rejects.toThrow("Your Stirling-PDF server is offline");
+  });
+
+  test("uses the server while it is online", async () => {
+    vi.mocked(selfHostedServerMonitor.getSnapshot).mockReturnValue({
+      status: "online",
+      isOnline: true,
+      serverUrl: "https://selfhosted.test",
+    });
+    await expect(operationRouter.getServerOnlyBaseUrl(certSign)).resolves.toBe(
+      "https://selfhosted.test",
+    );
+  });
+
+  test("uses the bundled backend's own certificate in local mode", async () => {
+    vi.mocked(connectionModeService.getCurrentMode).mockResolvedValue("local");
+    await expect(operationRouter.getServerOnlyBaseUrl(certSign)).resolves.toBe(
+      "http://localhost:62994",
+    );
   });
 });

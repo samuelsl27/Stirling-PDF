@@ -146,12 +146,12 @@ test.describe("CertSign tool - hardware on mac/Linux (no Windows store)", () => 
     await expect(deviceBtn).toBeVisible({ timeout: 10_000 });
     await deviceBtn.click();
 
-    // Only one hardware kind applies -> no Windows-store toggle.
+    // No OS store -> no digital ID picker and no way back to one.
     await expect(
-      page.getByRole("button", { name: /windows certificate store/i }),
+      page.getByRole("button", { name: /back to digital ids/i }),
     ).toHaveCount(0);
-    // The USB-token (PKCS#11) driver picker is shown instead.
-    await expect(page.getByText(/PKCS#11 driver/i).first()).toBeVisible({
+    // The card software (PKCS#11) picker is shown instead.
+    await expect(page.getByText(/PKCS#11/i).first()).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -214,26 +214,17 @@ test.describe("CertSign tool - hardware signing (desktop)", () => {
     await expect(deviceBtn).toBeVisible({ timeout: 10_000 });
     await deviceBtn.click();
 
-    // The Windows store / USB token kind toggle renders.
+    // The single enumerated cert is listed and auto-selected.
     await expect(
-      page.getByRole("button", { name: /windows certificate store/i }),
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole("radio", { name: /Anthony Stirling/ }),
+    ).toBeChecked({ timeout: 10_000 });
 
-    // The single enumerated cert is auto-selected, and the panel names it.
-    await expect(page.getByText("Anthony Stirling").first()).toBeVisible({
-      timeout: 10_000,
-    });
-
-    // The list itself lives in a dialog, where there is room to tell certificates apart.
-    await page.getByRole("button", { name: /change certificate/i }).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    // The PKCS#11 route sits behind a link and can be backed out of.
+    await page.getByRole("button", { name: /read the card directly/i }).click();
+    await expect(page.getByText(/PKCS#11/i).first()).toBeVisible();
+    await page.getByRole("button", { name: /back to digital ids/i }).click();
     await expect(
-      dialog.getByRole("columnheader", { name: /issued by/i }),
+      page.getByRole("radio", { name: /Anthony Stirling/ }),
     ).toBeVisible();
-    await expect(
-      dialog.getByRole("columnheader", { name: /valid until/i }),
-    ).toBeVisible();
-    await expect(dialog.getByText("Anthony Stirling").first()).toBeVisible();
   });
 });

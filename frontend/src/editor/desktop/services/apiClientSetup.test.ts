@@ -22,6 +22,7 @@ vi.mock("@editor/services/tauriBackendService", () => ({
     isOnline: true,
     getBackendStatus: () => "healthy",
     getBackendPort: () => 8080,
+    getBackendUrl: () => "http://127.0.0.1:5555/",
   },
 }));
 vi.mock("@editor/constants/backendErrors", () => ({
@@ -32,6 +33,7 @@ vi.mock("@editor/services/operationRouter", () => ({
     isSelfHostedMode: vi.fn().mockResolvedValue(true),
     isSaaSMode: vi.fn().mockResolvedValue(false),
     getBaseUrl: vi.fn().mockResolvedValue("https://example.test"),
+    getServerOnlyBaseUrl: vi.fn().mockResolvedValue("https://example.test"),
     shouldSkipBackendReadyCheck: vi.fn().mockResolvedValue(false),
   },
 }));
@@ -293,93 +295,11 @@ describe("desktop request interceptor - auth for SaaS-backend requests", () => {
     expect(operationRouter.getBaseUrl).toHaveBeenCalledWith(
       "/api/v1/convert/pdf/text",
       "pdf-to-rtf",
-      false,
     );
     expect(operationRouter.shouldSkipBackendReadyCheck).toHaveBeenCalledWith(
       "/api/v1/convert/pdf/text",
       "pdf-to-rtf",
     );
-  });
-});
-
-// In self-hosted mode every request carries the server's token, because the
-// server is where they all go. Device-local ones do not go there, so they must
-// not carry it either: the auth decision has to follow the destination rather
-// than the connection mode.
-describe("desktop request interceptor - device-local requests", () => {
-  type ReqConfig = {
-    url: string;
-    method: string;
-    headers: Record<string, string>;
-    deviceLocal?: boolean;
-  };
-
-  async function runRequestInterceptor(config: ReqConfig): Promise<ReqConfig> {
-    const { client, handlers } = makeMockClient();
-    setupApiInterceptors(client as unknown as AxiosInstance);
-    const handler = handlers.request[0];
-    expect(handler).toBeTypeOf("function");
-    return (await handler(config)) as ReqConfig;
-  }
-
-  beforeEach(() => {
-    getAccessTokenMock.mockReset();
-    getAccessTokenMock.mockResolvedValue("server-jwt");
-    // Connected to a self-hosted server: everything else would be authenticated.
-    vi.mocked(operationRouter.isSelfHostedMode).mockResolvedValue(true);
-    vi.mocked(operationRouter.isSaaSMode).mockResolvedValue(false);
-    vi.mocked(operationRouter.getBaseUrl).mockResolvedValue(
-      "http://localhost:8080",
-    );
-    vi.mocked(operationRouter.shouldSkipBackendReadyCheck).mockResolvedValue(
-      true,
-    );
-  });
-
-  test("a hardware endpoint carries no server token", async () => {
-    const result = await runRequestInterceptor({
-      url: "/api/v1/security/cert-sign/hardware/capabilities",
-      method: "get",
-      headers: {},
-    });
-
-    expect(result.headers.Authorization).toBeUndefined();
-  });
-
-  test("a request marked device-local carries no server token", async () => {
-    const result = await runRequestInterceptor({
-      url: "/api/v1/security/cert-sign",
-      method: "post",
-      headers: {},
-      deviceLocal: true,
-    });
-
-    expect(result.headers.Authorization).toBeUndefined();
-  });
-
-  test("the mark reaches the router, so it can override the mode", async () => {
-    await runRequestInterceptor({
-      url: "/api/v1/security/cert-sign",
-      method: "post",
-      headers: {},
-      deviceLocal: true,
-    });
-
-    expect(operationRouter.getBaseUrl).toHaveBeenCalledWith(
-      "/api/v1/security/cert-sign",
-      undefined,
-      true,
-    );
-  });
-
-  test("an ordinary signing request still authenticates against the server", async () => {
-    const result = await runRequestInterceptor({
-      url: "/api/v1/security/cert-sign",
-      method: "post",
-      headers: {},
-    });
-
-    expect(result.headers.Authorization).toBe("Bearer server-jwt");
   });
 });
 
@@ -394,5 +314,120 @@ describe("desktop getAuthHeaders (raw fetch / AI SSE stream)", () => {
   test("returns no header when there is no token", async () => {
     getAccessTokenMock.mockResolvedValue(null);
     expect(await getAuthHeaders()).toEqual({});
+  });
+});
+
+describe("desktop request interceptor - hardware signing stays on this device", () => {
+  type ReqConfig = {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    data?: unknown;
+  };
+
+  async function runRequestInterceptor(config: ReqConfig): Promise<ReqConfig> {
+    const { client, handlers } = makeMockClient();
+    setupApiInterceptors(client as unknown as AxiosInstance);
+    return (await handlers.request[0](config)) as ReqConfig;
+  }
+
+  function signForm(certType: string): FormData {
+    const form = new FormData();
+    form.append("certType", certType);
+    form.append("password", "123456");
+    return form;
+  }
+
+  beforeEach(() => {
+    getAccessTokenMock.mockReset();
+    getAccessTokenMock.mockResolvedValue("jwt-123");
+    vi.mocked(operationRouter.getBaseUrl).mockClear();
+    vi.mocked(operationRouter.isSelfHostedMode).mockResolvedValue(true);
+    vi.mocked(operationRouter.isSaaSMode).mockResolvedValue(false);
+    vi.mocked(operationRouter.getBaseUrl).mockResolvedValue(
+      "https://remote.test",
+    );
+    vi.mocked(operationRouter.getServerOnlyBaseUrl).mockClear();
+    vi.mocked(operationRouter.getServerOnlyBaseUrl).mockResolvedValue(
+      "https://remote.test",
+    );
+  });
+
+  test("sends token discovery, PIN included, to the bundled backend", async () => {
+    const result = await runRequestInterceptor({
+      url: "/api/v1/security/cert-sign/hardware/pkcs11-certificates",
+      method: "post",
+      headers: {},
+      data: { pin: "123456" },
+    });
+    expect(result.url).toBe(
+      "http://127.0.0.1:5555/api/v1/security/cert-sign/hardware/pkcs11-certificates",
+    );
+    expect(result.headers.Authorization).toBeUndefined();
+    expect(operationRouter.getBaseUrl).not.toHaveBeenCalled();
+  });
+
+  test.each(["WINDOWS_STORE", "MACOS_KEYCHAIN", "PKCS11"])(
+    "sends %s signing to the bundled backend",
+    async (certType) => {
+      const result = await runRequestInterceptor({
+        url: "/api/v1/security/cert-sign",
+        method: "post",
+        headers: {},
+        data: signForm(certType),
+      });
+      expect(result.url).toBe(
+        "http://127.0.0.1:5555/api/v1/security/cert-sign",
+      );
+      expect(result.headers.Authorization).toBeUndefined();
+    },
+  );
+
+  test("keeps server signing on the connected server", async () => {
+    const result = await runRequestInterceptor({
+      url: "/api/v1/security/cert-sign",
+      method: "post",
+      headers: {},
+      data: signForm("SERVER"),
+    });
+    expect(result.url).toBe("https://remote.test/api/v1/security/cert-sign");
+    expect(result.headers.Authorization).toBe("Bearer jwt-123");
+    expect(operationRouter.getServerOnlyBaseUrl).toHaveBeenCalled();
+    expect(operationRouter.getBaseUrl).not.toHaveBeenCalled();
+  });
+
+  test("keeps the server certificate lookup on the connected server", async () => {
+    await runRequestInterceptor({
+      url: "/api/v1/security/cert-sign/server-certificate",
+      method: "get",
+      headers: {},
+    });
+    expect(operationRouter.getServerOnlyBaseUrl).toHaveBeenCalled();
+    expect(operationRouter.getBaseUrl).not.toHaveBeenCalled();
+  });
+
+  test("fails server signing when the server is offline", async () => {
+    vi.mocked(operationRouter.getServerOnlyBaseUrl).mockRejectedValueOnce(
+      new Error("Your Stirling-PDF server is offline"),
+    );
+    await expect(
+      runRequestInterceptor({
+        url: "/api/v1/security/cert-sign",
+        method: "post",
+        headers: {},
+        data: signForm("SERVER"),
+      }),
+    ).rejects.toThrow("Your Stirling-PDF server is offline");
+  });
+
+  test("routes uploaded-file signing as usual", async () => {
+    const result = await runRequestInterceptor({
+      url: "/api/v1/security/cert-sign",
+      method: "post",
+      headers: {},
+      data: signForm("P12"),
+    });
+    expect(result.url).toBe("https://remote.test/api/v1/security/cert-sign");
+    expect(operationRouter.getServerOnlyBaseUrl).not.toHaveBeenCalled();
   });
 });
