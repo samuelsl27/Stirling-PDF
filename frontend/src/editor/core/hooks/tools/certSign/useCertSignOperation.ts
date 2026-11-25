@@ -42,6 +42,7 @@ export const certSignToApiParams = (
   // Non-file identifiers depend on the chosen certificate type.
   switch (parameters.certType) {
     case "WINDOWS_STORE":
+    case "MACOS_KEYCHAIN":
       if (parameters.alias) apiParams.alias = parameters.alias;
       break;
     case "PKCS11":
@@ -227,12 +228,13 @@ export const buildCertSignFormData = (
  *
  * The endpoint is the same either way, so the path cannot carry the distinction:
  * only the chosen certificate type says whether the key is an uploaded file
- * (which any backend can use) or lives in the Windows store or a plugged-in
- * token (which only the local one can reach). Builds that can route elsewhere
- * honour the mark; the rest ignore it, having nowhere else to send it.
+ * (which any backend can use) or lives in the Windows store, the macOS keychain
+ * or a plugged-in token (which only the local one can reach).
  */
 const certSignRequestConfig = (parameters: CertSignParameters) =>
-  parameters.certType === "WINDOWS_STORE" || parameters.certType === "PKCS11"
+  parameters.certType === "WINDOWS_STORE" ||
+  parameters.certType === "MACOS_KEYCHAIN" ||
+  parameters.certType === "PKCS11"
     ? DEVICE_LOCAL_REQUEST
     : {};
 

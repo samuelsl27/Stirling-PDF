@@ -27,9 +27,11 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
@@ -324,7 +326,28 @@ class CertSignControllerTest {
         assertTrue(appearance.contains("15 TL"), "the legacy leading changed: " + appearance);
         assertTrue(appearance.contains("10 35 Td"), "the legacy first line moved: " + appearance);
         // The legacy text says "Signed by" with no colon, unlike the configurable appearance.
-        assertTrue(appearance.contains("Signed by "), appearance);
+        assertTrue(appearanceTextOf(signed).contains("Signed by "), appearance);
+    }
+
+    /**
+     * What the first widget's appearance shows, read back as text. The type is embedded as glyph
+     * ids, so the content stream no longer holds the string itself.
+     */
+    private static String appearanceTextOf(byte[] signed) throws Exception {
+        try (PDDocument doc = Loader.loadPDF(signed)) {
+            PDAppearanceStream appearance =
+                    ((PDAnnotationWidget) doc.getPage(0).getAnnotations().getFirst())
+                            .getAppearance()
+                            .getNormalAppearance()
+                            .getAppearanceStream();
+            PDPage scratch = new PDPage();
+            scratch.setResources(appearance.getResources());
+            scratch.setContents(new PDStream(appearance.getCOSObject()));
+            doc.addPage(scratch);
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(doc.getNumberOfPages());
+            return stripper.getText(doc);
+        }
     }
 
     /** The normal appearance stream of the first widget, as PDF operators. */
@@ -473,10 +496,11 @@ class CertSignControllerTest {
     void legacyAppearanceShowsTheNameAsWritten() throws Exception {
         SignPDFWithCertRequest request = legacyRequest(p12For("CN=GARCIA PEREZ\\, JUAN,C=ES"));
 
-        String appearance =
-                appearanceOf(drainBody(certSignController.signPDFWithCert(request, httpRequest)));
+        String text =
+                appearanceTextOf(
+                        drainBody(certSignController.signPDFWithCert(request, httpRequest)));
 
-        assertTrue(appearance.contains("Signed by GARCIA PEREZ, JUAN"), appearance);
+        assertTrue(text.contains("Signed by GARCIA PEREZ, JUAN"), text);
     }
 
     /** No common name to show, which is no reason to answer with an empty file. */
@@ -489,8 +513,8 @@ class CertSignControllerTest {
         try (PDDocument doc = Loader.loadPDF(signed)) {
             assertEquals(1, doc.getSignatureDictionaries().size());
         }
-        String appearance = appearanceOf(signed);
-        assertTrue(appearance.contains("Signed by C=ES,O=Acme"), appearance);
+        String text = appearanceTextOf(signed);
+        assertTrue(text.contains("Signed by C=ES,O=Acme"), text);
     }
 
     /** A visible signature with nothing configured, which draws the legacy appearance. */
@@ -785,12 +809,16 @@ class CertSignControllerTest {
 
     /** An openssl-style unencrypted PKCS#8 key and a self-signed certificate, as PEM text. */
     private static byte[][] unencryptedPemPair() throws Exception {
+        return unencryptedPemPair("CN=Chat Tester");
+    }
+
+    private static byte[][] unencryptedPemPair(String subjectDn) throws Exception {
         java.security.KeyPairGenerator generator =
                 java.security.KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         java.security.KeyPair pair = generator.generateKeyPair();
         org.bouncycastle.asn1.x500.X500Name subject =
-                new org.bouncycastle.asn1.x500.X500Name("CN=Chat Tester");
+                new org.bouncycastle.asn1.x500.X500Name(subjectDn);
         java.util.Date now = new java.util.Date();
         java.security.cert.X509Certificate cert =
                 new org.bouncycastle.cert.jcajce.JcaX509CertificateConverter()
@@ -823,7 +851,10 @@ class CertSignControllerTest {
     }
 
     private SignPDFWithCertRequest unencryptedPemRequest() throws Exception {
-        byte[][] pemPair = unencryptedPemPair();
+        return unencryptedPemRequest(unencryptedPemPair());
+    }
+
+    private SignPDFWithCertRequest unencryptedPemRequest(byte[][] pemPair) throws Exception {
         SignPDFWithCertRequest request = new SignPDFWithCertRequest();
         request.setFileInput(
                 new MockMultipartFile(
@@ -842,6 +873,32 @@ class CertSignControllerTest {
         SignPDFWithCertRequest request = unencryptedPemRequest();
         request.setShowSignature(true);
         request.setPageNumber(1);
+
+        ResponseEntity<Resource> response =
+                certSignController.signPDFWithCert(request, httpRequest);
+
+        assertTrue(drainBody(response).length > 0);
+    }
+
+    @Test
+    void visibleSignatureForACertificateWithNoCommonNameSigns() throws Exception {
+        SignPDFWithCertRequest request = unencryptedPemRequest(unencryptedPemPair("O=Example Org"));
+        request.setShowSignature(true);
+        request.setPageNumber(1);
+
+        ResponseEntity<Resource> response =
+                certSignController.signPDFWithCert(request, httpRequest);
+
+        assertTrue(drainBody(response).length > 0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CN=山田 太郎", "CN=Иван Петров", "O=東京"})
+    void visibleSignatureShowsNamesOutsideWesternEuropeanScripts(String subject) throws Exception {
+        SignPDFWithCertRequest request = unencryptedPemRequest(unencryptedPemPair(subject));
+        request.setShowSignature(true);
+        request.setPageNumber(1);
+        request.setReason("承認 · Утверждено");
 
         ResponseEntity<Resource> response =
                 certSignController.signPDFWithCert(request, httpRequest);
