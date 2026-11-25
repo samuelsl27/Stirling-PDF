@@ -11,6 +11,7 @@ import {
 import { FIELD_TYPE_ICON } from "@editor/tools/formFill/fieldMeta";
 import { PendingFields } from "@editor/tools/formFill/PendingFields";
 import { SkippedEditsAlert } from "@editor/tools/formFill/SkippedEditsAlert";
+import { XfaNotice } from "@editor/tools/formFill/XfaNotice";
 import styles from "@editor/tools/formFill/FormFill.module.css";
 
 interface FormFieldCreatePanelProps {
@@ -87,6 +88,7 @@ export function FormFieldCreatePanel({
         )}
 
         <SkippedEditsAlert />
+        <XfaNotice file={currentFile} variant="panel" scope="structure" />
       </div>
 
       <PendingFields />

@@ -386,7 +386,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                             "Content-Type",
                             "X-Stirling-Skipped-Field-Edits",
                             "X-Stirling-Skipped-Field-Edits-Total",
-                            "X-Stirling-Detected-Fields")
+                            "X-Stirling-Detected-Fields",
+                            "X-Stirling-Xfa-Sync")
                     .allowCredentials(true)
                     .maxAge(3600);
         } else if (hasConfiguredOrigins) {
@@ -435,7 +436,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                             "Content-Type",
                             "X-Stirling-Skipped-Field-Edits",
                             "X-Stirling-Skipped-Field-Edits-Total",
-                            "X-Stirling-Detected-Fields")
+                            "X-Stirling-Detected-Fields",
+                            "X-Stirling-Xfa-Sync")
                     .allowCredentials(true)
                     .maxAge(3600);
         } else {
@@ -465,7 +467,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                             "Content-Type",
                             "X-Stirling-Skipped-Field-Edits",
                             "X-Stirling-Skipped-Field-Edits-Total",
-                            "X-Stirling-Detected-Fields")
+                            "X-Stirling-Detected-Fields",
+                            "X-Stirling-Xfa-Sync")
                     .allowCredentials(true)
                     .maxAge(3600);
         }
