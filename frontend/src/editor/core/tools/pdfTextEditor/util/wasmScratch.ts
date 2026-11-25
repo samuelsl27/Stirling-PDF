@@ -46,6 +46,9 @@ export const SCRATCH = {
   reflowBbox: key(),
   reflowMatrix: key(),
   partialBbox: key(),
+  emitGlyphWidth: key(),
+  emitMatrix: key(),
+  partialFontName: key(),
   imageMatrix: key(),
   annotRect: key(),
   shapeDrawMode: key(),
@@ -78,6 +81,7 @@ export const SCRATCH = {
   readerReadTextA: key(),
   readerReadTextB: key(),
   readerSize: key(),
+  readerSpaceWidth: key(),
   reflowText: key(),
   charcodes: key(),
   tagName: key(),
@@ -90,6 +94,14 @@ export const SCRATCH = {
   splitOriginY: key(),
   splitFontSize: key(),
   splitStrokeWidth: key(),
+  linkCharBox: key(),
+  glyphPoint: key(),
+  liftClipPoint: key(),
+  liftBounds: key(),
+  kernOriginX: key(),
+  kernOriginY: key(),
+  kernFontSize: key(),
+  kernGlyphWidth: key(),
 } as const;
 
 /** Structural minimum: any wrapper that exposes PDFium's wasm allocator. */
