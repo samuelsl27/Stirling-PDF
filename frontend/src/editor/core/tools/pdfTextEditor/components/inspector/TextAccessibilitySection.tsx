@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { Box, Group, Stack } from "@mantine/core";
+import { Box, Group, Stack, Textarea } from "@mantine/core";
 import { ActionIcon } from "@editor/ui/ActionIcon";
 import { Button } from "@editor/ui/Button";
 import { Icon } from "@editor/ui/Icon";
@@ -15,7 +15,10 @@ import {
   FURNITURE,
   type Furniture,
 } from "@editor/tools/pdfTextEditor/model/artifactKind";
-import { TEXT_BLOCK_TYPES } from "@editor/tools/pdfTextEditor/model/PageStructure";
+import {
+  TEXT_BLOCK_TYPES,
+  type DescribableType,
+} from "@editor/tools/pdfTextEditor/model/PageStructure";
 import type {
   StructureRole,
   StructureType,
@@ -31,18 +34,24 @@ import {
 import type {
   InnerTagsControl,
   OtherPagesControl,
+  TextDescriptionControl,
   TextLanguageControl,
+  UntaggedLinksControl,
 } from "@editor/tools/pdfTextEditor/hooks/useTextAccessibility";
 import { LanguagePicker } from "@editor/tools/pdfTextEditor/components/inspector/LanguagePicker";
 import "@editor/tools/pdfTextEditor/components/inspector/TextAccessibilitySection.css";
 import { privateContentClassName } from "@editor/components/shared/privateContentClassName";
+import { NextToReviewButton } from "@editor/tools/pdfTextEditor/components/inspector/NextToReviewButton";
+import type { AccessibilityReview } from "@editor/tools/pdfTextEditor/util/accessibilityReview";
 
 /**
  * What the selected text is tagged as and the language it is read in, with
  * pickers to change them: retagging its block, giving untagged text an
- * element of its own, or making it an artifact. Beneath them, the tags marking parts of the text, and
- * pickers for characters selected in it. With several runs selected, the tag
- * they share and their language.
+ * element of its own, or making it an artifact. A formula or figure also
+ * takes a description, with a way on to the next image or text needing
+ * attention; `review` counts this text too. Beneath them, the tags marking parts of the text, a
+ * way to tag the links over it, and pickers for characters selected in it.
+ * With several runs selected, the tag they share and their language.
  */
 export function TextAccessibilitySection({
   tag,
@@ -50,12 +59,20 @@ export function TextAccessibilitySection({
   inner,
   language,
   otherPages,
+  description,
+  untaggedLinks,
+  review,
+  onNext,
 }: {
   tag: TextTag | null;
   onSetTag: (choice: TextTagChoice) => void;
   inner: InnerTagsControl;
   language: TextLanguageControl | null;
   otherPages: OtherPagesControl | null;
+  description: TextDescriptionControl | null;
+  untaggedLinks: UntaggedLinksControl | null;
+  review: AccessibilityReview;
+  onNext: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -65,11 +82,19 @@ export function TextAccessibilitySection({
       </SectionLabel>
       <Stack gap="xs">
         {tag && <TagField tag={tag} onSetTag={onSetTag} />}
+        {description && (
+          <DescriptionField
+            control={description}
+            review={review}
+            onNext={onNext}
+          />
+        )}
         {otherPages && <OtherPagesButton control={otherPages} />}
         {language && <TextLanguageField control={language} />}
         {tag && (
           <>
             <InnerTagList inner={inner} />
+            {untaggedLinks && <TagLinksButton control={untaggedLinks} />}
             <NewTagPicker inner={inner} />
             <NewLanguagePicker inner={inner} />
           </>
@@ -177,6 +202,71 @@ function artifactValue(furniture: Furniture | null): string {
   return `${ARTIFACT_VALUE}${furniture ?? ""}`;
 }
 
+/** What screen readers read out in place of the formula or figure the text makes up. */
+function DescriptionField({
+  control,
+  review,
+  onNext,
+}: {
+  control: TextDescriptionControl;
+  review: AccessibilityReview;
+  onNext: () => void;
+}) {
+  const { t } = useTranslation();
+  const label = descriptionLabel(t, control.type);
+  const othersPending =
+    review.needsDescription +
+    review.untagged -
+    (control.description?.trim() ? 0 : 1);
+  return (
+    <>
+      <Field label={label} hint={descriptionHint(t, control.type)}>
+        <Textarea
+          aria-label={label}
+          value={control.description ?? ""}
+          className={privateContentClassName}
+          onChange={(e) => control.onSet(e.currentTarget.value)}
+          autosize
+          minRows={2}
+          maxRows={6}
+          size="xs"
+          data-testid="pdf-editor-text-description"
+        />
+      </Field>
+      {othersPending > 0 && (
+        <NextToReviewButton
+          onClick={onNext}
+          testId="pdf-editor-text-description-next"
+        />
+      )}
+    </>
+  );
+}
+
+function descriptionLabel(t: TFunction, type: DescribableType): string {
+  return type === "Formula"
+    ? t(
+        "pdfTextEditor.inspector.accessibility.formulaDescription",
+        "Formula description",
+      )
+    : t(
+        "pdfTextEditor.inspector.accessibility.figureDescription",
+        "Figure description",
+      );
+}
+
+function descriptionHint(t: TFunction, type: DescribableType): string {
+  return type === "Formula"
+    ? t(
+        "pdfTextEditor.inspector.accessibility.formulaDescriptionInfo",
+        'Screen readers read this out in place of the formula. Say it as you would aloud, such as "x squared plus one".',
+      )
+    : t(
+        "pdfTextEditor.inspector.accessibility.figureDescriptionInfo",
+        "Screen readers read this out in place of the figure.",
+      );
+}
+
 /** Gives matching text on other pages the selected artifact's kind. */
 function OtherPagesButton({ control }: { control: OtherPagesControl }) {
   const { t } = useTranslation();
@@ -196,6 +286,26 @@ function OtherPagesButton({ control }: { control: OtherPagesControl }) {
         "Apply to {{count}} other pages",
         { count: control.pages },
       )}
+    </Button>
+  );
+}
+
+function TagLinksButton({ control }: { control: UntaggedLinksControl }) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      size="sm"
+      variant="secondary"
+      accent="neutral"
+      fullWidth
+      justify="start"
+      leftSection={<Icon name="link" size={20} />}
+      onClick={control.onTag}
+      data-testid="pdf-editor-tag-links"
+    >
+      {t("pdfTextEditor.inspector.accessibility.tagLinks", "Tag link", {
+        count: control.count,
+      })}
     </Button>
   );
 }
@@ -253,6 +363,9 @@ function InnerTagList({ inner }: { inner: InnerTagsControl }) {
             onSelect={() => inner.onSelect(index)}
             onSet={(type) => inner.onSet(index, type)}
             onSetLanguage={(lang) => inner.onSetLanguage(index, lang)}
+            onSetLinkDescription={(description) =>
+              inner.onSetLinkDescription(index, description)
+            }
           />
         ))}
       </Stack>
@@ -267,6 +380,7 @@ function InnerTagRow({
   onSelect,
   onSet,
   onSetLanguage,
+  onSetLinkDescription,
 }: {
   number: number;
   innerTag: InnerTag;
@@ -274,6 +388,7 @@ function InnerTagRow({
   onSelect: () => void;
   onSet: (type: StructureType | null) => void;
   onSetLanguage: (lang: string | null) => void;
+  onSetLinkDescription: (description: string) => void;
 }) {
   const text = innerTag.text.replace(/\s+/g, " ").trim();
   return (
@@ -298,6 +413,7 @@ function InnerTagRow({
           innerTag={innerTag}
           onSet={onSet}
           onSetLanguage={onSetLanguage}
+          onSetLinkDescription={onSetLinkDescription}
         />
       )}
     </div>
@@ -309,11 +425,13 @@ function InnerTagControls({
   innerTag,
   onSet,
   onSetLanguage,
+  onSetLinkDescription,
 }: {
   number: number;
   innerTag: InnerTag;
   onSet: (type: StructureType | null) => void;
   onSetLanguage: (lang: string | null) => void;
+  onSetLinkDescription: (description: string) => void;
 }) {
   const { t } = useTranslation();
   const removeLabel = t(
@@ -366,6 +484,23 @@ function InnerTagControls({
         testId="pdf-editor-inner-tag-language-picker"
         disabled={!innerTag.languageEditable}
       />
+      {innerTag.link && (
+        <Textarea
+          label={t(
+            "pdfTextEditor.inspector.accessibility.linkDescription",
+            "Link description",
+          )}
+          value={innerTag.link.description ?? ""}
+          className={privateContentClassName}
+          onChange={(e) => onSetLinkDescription(e.currentTarget.value)}
+          disabled={!innerTag.link.editable}
+          autosize
+          minRows={1}
+          maxRows={4}
+          size="xs"
+          data-testid="pdf-editor-inner-tag-link-description"
+        />
+      )}
     </Stack>
   );
 }
@@ -503,7 +638,10 @@ function statusText(
   }
 }
 
-function artifactName(t: TFunction, furniture: Furniture | null): string {
+export function artifactName(
+  t: TFunction,
+  furniture: Furniture | null,
+): string {
   switch (furniture) {
     case null:
       return t(
@@ -534,7 +672,7 @@ function artifactName(t: TFunction, furniture: Furniture | null): string {
 }
 
 /** The type's name for a reader; the type itself where it has no plain-language name. */
-function typeName(t: TFunction, type: StructureType): string {
+export function typeName(t: TFunction, type: StructureType): string {
   switch (type) {
     case "Document":
       return t(
