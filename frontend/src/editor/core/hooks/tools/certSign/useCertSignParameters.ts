@@ -1,14 +1,15 @@
 import { BaseParameters } from "@editor/types/parameters";
+import type { PdfBox } from "@editor/services/signatureFieldLayout";
+import type {
+  CertificateField,
+  GraphicPosition,
+} from "@editor/constants/certSignConstants";
 import {
   useBaseParameters,
   BaseParametersHook,
 } from "@editor/hooks/tools/shared/useBaseParameters";
-import { Rectangle } from "@editor/utils/cropCoordinates";
-import {
-  CertificateAttribute,
-  DEFAULT_SIGNATURE_LOGO_POSITION,
-  SignatureLogoPosition,
-} from "@editor/constants/certSignConstants";
+
+export type StampGraphic = "NAME" | "IMAGE" | "NONE";
 
 export interface CertSignParameters extends BaseParameters {
   // Where the signing certificate comes from:
@@ -37,42 +38,34 @@ export interface CertSignParameters extends BaseParameters {
   pkcs11LibraryPath?: string;
   pkcs11Slot?: number;
 
+  /** Fingerprint of the certificate the user reviewed (server or digital ID); sent at signing only. */
+  expectedCertificateSha256?: string;
+  /** The chosen keychain ID was on a security key, so a copy elsewhere must not sign. */
+  requireToken?: boolean;
+
   // Signature appearance options
   showSignature: boolean;
   reason: string;
   location: string;
   name: string;
   pageNumber: number;
-  showLogo: boolean;
-
-  /**
-   * Image drawn inside the box, typically the signer's organisation logo. Undefined
-   * keeps the mark that ships with the app.
-   */
-  logoImage?: File;
-
-  /** Where that logo sits inside the box. */
-  logoPosition: SignatureLogoPosition;
-
-  /**
-   * Where the signature box sits on the page, in PDF points with the origin at the
-   * bottom-left corner - the same convention the crop tool uses, so the shared
-   * cropCoordinates helpers can feed it directly. Undefined means "wherever the
-   * backend puts it by default", which keeps the tool usable without drawing a box.
-   */
-  signatureArea?: Rectangle;
-
-  /**
-   * Certificate fields to draw inside the box, in the order shown. Empty means the
-   * backend picks its defaults (signer, date and reason).
-   */
-  visibleAttributes: CertificateAttribute[];
-
-  /**
-   * Repeat the signature's look on every page. Only the signed page carries a real
-   * signature; the rest get a visual mark, which the UI has to say out loud.
-   */
-  markAllPages: boolean;
+  /** Beside the details: the name, the signer's own image, or nothing. */
+  stampGraphic: StampGraphic;
+  /** The signer's image (a handwritten signature, a seal) for the IMAGE graphic. */
+  signatureImage?: File;
+  /** The server's signature logo faded behind the whole stamp. */
+  showWatermark: boolean;
+  showCertificateDetails: boolean;
+  /** An empty signature field to sign into; it brings its own page and box. */
+  fieldName?: string;
+  /** Box on pageNumber in PDF user space; unset leaves the server's default corner. */
+  stampBox?: PdfBox;
+  /** The side of the box the name or image takes; BEHIND is for images only. */
+  graphicPosition?: GraphicPosition;
+  /** Certificate fields added to the stamp's details, in drawing order. */
+  certificateFields?: CertificateField[];
+  /** Repeat the stamp's look on every other page. */
+  markAllPages?: boolean;
 }
 
 export const defaultParameters: CertSignParameters = {
@@ -84,10 +77,9 @@ export const defaultParameters: CertSignParameters = {
   location: "",
   name: "",
   pageNumber: 1,
-  showLogo: true,
-  logoPosition: DEFAULT_SIGNATURE_LOGO_POSITION,
-  visibleAttributes: [],
-  markAllPages: false,
+  stampGraphic: "NAME",
+  showWatermark: true,
+  showCertificateDetails: false,
 };
 
 export type CertSignParametersHook = BaseParametersHook<CertSignParameters>;
@@ -97,6 +89,14 @@ export type CertSignParametersHook = BaseParametersHook<CertSignParameters>;
 export function validateCertSignParameters(
   params: CertSignParameters,
 ): boolean {
+  if (
+    params.showSignature &&
+    params.stampGraphic === "IMAGE" &&
+    !params.signatureImage
+  ) {
+    return false;
+  }
+
   // Auto mode (server certificate) - no additional validation needed
   if (params.signMode === "AUTO") {
     return true;

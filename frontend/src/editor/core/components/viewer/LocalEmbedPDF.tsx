@@ -155,7 +155,7 @@ import { FormFieldCreationOverlay } from "@editor/tools/formFill/FormFieldCreati
 import { FormFieldEditOverlay } from "@editor/tools/formFill/FormFieldEditOverlay";
 import { ButtonAppearanceOverlay } from "@editor/tools/formFill/ButtonAppearanceOverlay";
 import SignatureFieldOverlay from "@editor/components/viewer/SignatureFieldOverlay";
-import SignatureBoxDragOverlay from "@editor/components/viewer/SignatureBoxDragOverlay";
+import { StampGuideLayer } from "@editor/components/viewer/StampGuideLayer";
 import { CommentsSidebar } from "@editor/components/viewer/CommentsSidebar";
 import { CommentAuthorProvider } from "@editor/contexts/CommentAuthorContext";
 import { useViewer } from "@editor/contexts/ViewerContext";
@@ -750,16 +750,6 @@ function PageLayers({
           renderFilter={PDF_RENDER_FILTERS[pdfRenderMode]}
         />
       )}
-      {/* Drag a signature box onto the page; inert until the cert-sign tool asks
-          for placement */}
-      {file && (
-        <SignatureBoxDragOverlay
-          pageIndex={pageIndex}
-          pageWidth={width}
-          pageHeight={height}
-          pdfSource={file}
-        />
-      )}
       <AnnotationEditingLayers
         documentId={documentId}
         pageIndex={pageIndex}
@@ -775,6 +765,14 @@ function PageLayers({
         selectionActive={isAnnotationMode && !annotationsReadOnly}
         readOnly={annotationsReadOnly}
       />
+      {file && (
+        <StampGuideLayer
+          pageIndex={pageIndex}
+          pdfSource={file}
+          pageWidth={width}
+          pageHeight={height}
+        />
+      )}
       {readOnlySignaturePreviews && (
         <SignaturePreviewLayer
           pageIndex={pageIndex}

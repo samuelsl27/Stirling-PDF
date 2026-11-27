@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { useEffect, Suspense, lazy } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@editor/ui/Icon";
 import { Box, Loader, Center, Stack, Text } from "@mantine/core";
@@ -35,9 +35,8 @@ import { ReviewHost } from "@editor/tools/pdfTextEditor/components/review/Review
 const SigningWorkspace = lazy(
   () => import("@editor/components/shared/signing/SigningWorkspace"),
 );
-const FileEditor = lazy(
-  () => import("@editor/components/fileEditor/FileEditor"),
-);
+const loadFileEditor = () => import("@editor/components/fileEditor/FileEditor");
+const FileEditor = lazy(loadFileEditor);
 const PageTracks = lazy(
   () => import("@editor/components/pageTracks/PageTracks"),
 );
@@ -78,7 +77,7 @@ export default function Workbench() {
   // Every view takes file drops on the whole canvas, not just the content it
   // happens to render. Views that do something of their own with a dropped file
   // (the file library, the PDF text editor) stop the events reaching here.
-  // The file sidebar shares this drop target and its overlay.
+  // The file sidebar and tool panel share this drop target and its overlay.
   const acceptsFileDrops = !takeover;
   const dropHandlers = useWorkbenchFileDrop(acceptsFileDrops);
   const isFileDragOver = useIsWorkbenchFileDragOver() && acceptsFileDrops;
@@ -116,6 +115,13 @@ export default function Workbench() {
     !readerMode &&
     !takeover &&
     !strip.enabled;
+
+  // Fetched ahead of need: while it loads, the grid is a bare spinner and the
+  // view being left keeps its toolbar.
+  useEffect(() => {
+    const id = window.requestIdleCallback(() => void loadFileEditor());
+    return () => window.cancelIdleCallback(id);
+  }, []);
 
   const handlePreviewClose = () => {
     setPreviewFile(null);

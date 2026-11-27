@@ -5,7 +5,7 @@ ARG BASE_VERSION=1.2.0@sha256:2e97e233a716a4f32acb14c6af93999d6d9735a4e4b711338a
 ARG BASE_IMAGE=stirlingtools/stirling-pdf-base:${BASE_VERSION}
 
 # Stage 1: Build the Java application and frontend
-FROM gradle:9.7.1-jdk25@sha256:e06837018d077ee7f1218e53499425ca7615702ad58856d980c154caa17eb093 AS app-build
+FROM gradle:9.8.2-jdk25@sha256:e46e15353757ef9c9be0197a243653e88d25ebcd4c3c841057cf839c11fcf898 AS app-build
 
 ARG TASK_VERSION=3.54.0
 ARG NODE_MAJOR_VERSION=24
@@ -70,7 +70,6 @@ ARG BUILD_PORTAL=true
 ARG VITE_SUPABASE_URL=""
 ARG VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY=""
 ARG VITE_SAAS_API_URL=""
-ARG VITE_ACCESSIBILITY_EDITING=""
 
 # Bundle only the JPDFium native for this image's target arch.
 ARG TARGETARCH
@@ -80,7 +79,6 @@ RUN JPDFIUM_PLATFORM="$([ "$TARGETARCH" = arm64 ] && echo linux-arm64 || echo li
     if [ -z "${VITE_SUPABASE_URL}" ]; then unset VITE_SUPABASE_URL; fi; \
     if [ -z "${VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY}" ]; then unset VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY; fi; \
     if [ -z "${VITE_SAAS_API_URL}" ]; then unset VITE_SAAS_API_URL; fi; \
-    if [ -z "${VITE_ACCESSIBILITY_EDITING}" ]; then unset VITE_ACCESSIBILITY_EDITING; fi; \
     STIRLING_FLAVOR=${STIRLING_FLAVOR} \
     gradle clean build \
       -PbuildWithFrontend=true \

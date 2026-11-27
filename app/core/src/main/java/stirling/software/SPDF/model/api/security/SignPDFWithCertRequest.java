@@ -70,6 +70,21 @@ public class SignPDFWithCertRequest extends PDFFile {
 
     @Schema(
             description =
+                    "MACOS_KEYCHAIN only: refuse unless the alias's key is on a smart card or"
+                            + " security key. Set it when the ID the user picked was on one, so"
+                            + " signing fails instead of using a copy of the same certificate in"
+                            + " the login keychain once the token is removed.")
+    private Boolean requireToken;
+
+    @Schema(
+            description =
+                    "SHA-256 fingerprint (hex) of the certificate the user reviewed, from the"
+                            + " certificate listing or the server-certificate endpoint. Signing is"
+                            + " refused when the certificate that would sign differs.")
+    private String expectedCertificateSha256;
+
+    @Schema(
+            description =
                     "Absolute path to the PKCS#11 driver library (required for PKCS11 type). Must"
                             + " be an allowed driver - a detected one or configured via"
                             + " STIRLING_PKCS11_LIBRARIES.")
@@ -110,75 +125,131 @@ public class SignPDFWithCertRequest extends PDFFile {
     @Schema(
             description =
                     "Page (1-based) for the visible signature. Only used when showSignature is"
-                            + " true.",
+                            + " true and fieldName is not set.",
             defaultValue = "1")
     private Integer pageNumber = 1;
 
     @Schema(
-            description = "Whether to visually show a signature logo along with the signature",
+            description =
+                    "Left edge of the visible signature box in PDF points, in the page's own"
+                            + " coordinate space (origin bottom-left, before page rotation, crop"
+                            + " box offset included). Give x, y, width and height together; when"
+                            + " all are omitted the box sits 36pt in from the bottom-right corner"
+                            + " of the visible page. The box must lie inside the page's crop box.")
+    private Float x;
+
+    @Schema(description = "Bottom edge of the visible signature box in PDF points; see x.")
+    private Float y;
+
+    @Schema(description = "Width of the visible signature box in PDF points; see x.")
+    private Float width;
+
+    @Schema(description = "Height of the visible signature box in PDF points; see x.")
+    private Float height;
+
+    @Schema(
+            description =
+                    "Fully qualified name of an empty signature field to sign into. The"
+                            + " signature takes that field's page and box: pageNumber is ignored"
+                            + " and x/y/width/height must be left out. Needs showSignature."
+                            + " Rejected when the field does not exist or is already signed.")
+    private String fieldName;
+
+    @Schema(
+            description = "Older name for showWatermark, used when showWatermark is not set.",
             defaultValue = "true",
             requiredMode = Schema.RequiredMode.REQUIRED)
     private Boolean showLogo = true;
 
     @Schema(
             description =
-                    "Image drawn inside the signature box when showLogo is set, typically the"
-                            + " signer's organisation logo. PNG or JPEG. Omit to keep the bundled"
-                            + " mark.")
-    private MultipartFile logoImage;
+                    "What fills the half beside the visible signature's details: NAME (the certificate's name in large type, the"
+                            + " default), IMAGE (signatureImage, such as a handwritten signature)"
+                            + " or NONE (the details alone fill the box).",
+            allowableValues = {"NAME", "IMAGE", "NONE"})
+    private String stampGraphic;
 
     @Schema(
             description =
-                    "Where the logo sits inside the signature box. BEHIND draws it under the text"
-                            + " as a watermark; the others give it a strip of its own. Sending it"
-                            + " without a signature box is allowed and applies the same layout to"
-                            + " the default box.",
-            defaultValue = "LEFT")
-    private SignatureLogoPosition logoPosition;
+                    "PNG or JPEG drawn beside the details when stampGraphic is IMAGE, up to 2 MB"
+                            + " and 4096 pixels on a side.",
+            format = "binary")
+    private MultipartFile signatureImage;
 
     @Schema(
             description =
-                    "Distance in PDF points from the left edge of the page to the left edge of the"
-                            + " signature box. Omit to keep the legacy bottom-left placement.")
-    private Float signatureX;
+                    "Draw the signature logo faded behind the whole visible signature: the"
+                            + " organisation's when an admin has uploaded one, else the Stirling"
+                            + " PDF logo. Defaults to showLogo.")
+    private Boolean showWatermark;
 
     @Schema(
             description =
-                    "Distance in PDF points from the bottom edge of the page to the bottom edge of"
-                            + " the signature box. PDF user space, same convention as the crop"
-                            + " endpoint: the origin is the bottom-left corner and y grows"
-                            + " upwards.")
-    private Float signatureY;
-
-    @Schema(description = "Width of the signature box in PDF points.", defaultValue = "200")
-    private Float signatureWidth;
-
-    @Schema(description = "Height of the signature box in PDF points.", defaultValue = "50")
-    private Float signatureHeight;
-
-    @Schema(
-            description =
-                    "Certificate fields to draw inside the signature box, in the order given. Omit"
-                            + " to keep the legacy content (signer name, date and reason). Fields"
-                            + " the certificate does not carry are skipped rather than drawn"
-                            + " blank.")
-    private List<CertificateAttribute> visibleAttributes;
-
-    @Schema(
-            description =
-                    "Labels to draw in front of each of visibleAttributes, in the same order. The"
-                            + " application holds its own translations, and the signature is baked"
-                            + " into the document, so the caller says what the reader should see."
-                            + " Omit to get English.")
-    private List<String> visibleAttributeLabels;
-
-    @Schema(
-            description =
-                    "Repeat the signature's appearance on every page. A PDF signature has one"
-                            + " widget on one page, so only the page given by pageNumber carries"
-                            + " the actual signature; the other pages get a visual mark with the"
-                            + " same content that is NOT a signature. Tell the user that, or the"
-                            + " document looks signed in more places than it is.",
+                    "Add a line to the visible signature with the certificate's distinguished"
+                            + " name, such as DN: CN=Ada Lovelace, O=Example Ltd, C=GB.",
             defaultValue = "false")
-    private Boolean markAllPages;
+    private Boolean showCertificateDetails = false;
+
+    @Schema(
+            description =
+                    "IANA time zone the visible signature's date is written in, as in"
+                            + " 2026.11.24 10:12:00 +01'00'. Defaults to the server's.",
+            example = "Europe/Berlin")
+    private String timeZone;
+
+    @Schema(
+            description =
+                    "The visible signature's first detail line, with {name} exactly once where"
+                            + " the certificate's name goes. Defaults to \"Digitally signed by"
+                            + " {name}\".",
+            example = "Digital signiert von {name}")
+    private String signedByLabel;
+
+    @Schema(
+            description = "Label before the date on the visible signature. Defaults to \"Date:\".",
+            example = "Datum:")
+    private String dateLabel;
+
+    @Schema(
+            description =
+                    "Label before the reason on the visible signature. Defaults to \"Reason:\".",
+            example = "Grund:")
+    private String reasonLabel;
+
+    @Schema(
+            description =
+                    "Label before the location on the visible signature. Defaults to"
+                            + " \"Location:\".",
+            example = "Ort:")
+    private String locationLabel;
+
+    @Schema(
+            description =
+                    "Side of the visible signature that stampGraphic takes. AUTO (the default) is"
+                            + " the left of a wide box and the top of a tall one. BEHIND draws"
+                            + " signatureImage faded under the details, in place of the watermark,"
+                            + " and needs stampGraphic IMAGE.",
+            allowableValues = {"AUTO", "LEFT", "RIGHT", "TOP", "BOTTOM", "BEHIND"})
+    private String graphicPosition;
+
+    @Schema(
+            description =
+                    "Certificate fields to add as detail lines of the visible signature, in the"
+                            + " order given. A field the certificate does not carry is skipped.")
+    private List<CertificateAttribute> certificateFields;
+
+    @Schema(
+            description =
+                    "Labels for certificateFields, one per field in the same order, such as"
+                            + " \"Organisation:\". Omit for the English labels.")
+    private List<String> certificateFieldLabels;
+
+    @Schema(
+            description =
+                    "Repeat the look of the visible signature on every other page. Only one page"
+                            + " carries the signature; the copies are page content that links to it."
+                            + " Ignored on a document that is already signed, which the copies"
+                            + " would change. Needs showSignature.",
+            defaultValue = "false")
+    private Boolean markAllPages = false;
 }

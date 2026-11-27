@@ -1,11 +1,18 @@
+import type { SignPDFWithCertRequest } from "@editor/types/toolApiTypes";
+
+export type CertificateField = NonNullable<
+  SignPDFWithCertRequest["certificateFields"]
+>[number];
+
+export type GraphicPosition = NonNullable<
+  SignPDFWithCertRequest["graphicPosition"]
+>;
+
 /**
- * Certificate fields the visible signature can display.
- *
- * The identifiers must match the backend's CertificateAttribute enum exactly - they
- * travel over the wire as-is.
+ * The certificate fields a visible signature can add. The signer's name, the date, the reason and
+ * the location are not here: the stamp already writes them.
  */
-export const CERTIFICATE_ATTRIBUTES = [
-  "SUBJECT_COMMON_NAME",
+export const CERTIFICATE_FIELDS = [
   "SUBJECT_ORGANISATION",
   "SUBJECT_ORGANISATIONAL_UNIT",
   "SUBJECT_COUNTRY",
@@ -16,71 +23,33 @@ export const CERTIFICATE_ATTRIBUTES = [
   "VALID_FROM",
   "VALID_UNTIL",
   "SIGNATURE_ALGORITHM",
-  "SIGNING_TIME",
-  "REASON",
-  "LOCATION",
-] as const;
+] as const satisfies readonly CertificateField[];
 
-export type CertificateAttribute = (typeof CERTIFICATE_ATTRIBUTES)[number];
-
-/** Translation keys for each field's checkbox label. */
-export const CERTIFICATE_ATTRIBUTE_LABEL_KEYS: Record<
-  CertificateAttribute,
-  string
+/** Each field's translation key and English label, as the stamp writes it. */
+export const CERTIFICATE_FIELD_LABELS: Record<
+  CertificateField,
+  { key: string; english: string }
 > = {
-  SUBJECT_COMMON_NAME: "certSign.attributes.subjectCommonName",
-  SUBJECT_ORGANISATION: "certSign.attributes.subjectOrganisation",
-  SUBJECT_ORGANISATIONAL_UNIT: "certSign.attributes.subjectOrganisationalUnit",
-  SUBJECT_COUNTRY: "certSign.attributes.subjectCountry",
-  SUBJECT_EMAIL: "certSign.attributes.subjectEmail",
-  ISSUER_COMMON_NAME: "certSign.attributes.issuerCommonName",
-  ISSUER_ORGANISATION: "certSign.attributes.issuerOrganisation",
-  SERIAL_NUMBER: "certSign.attributes.serialNumber",
-  VALID_FROM: "certSign.attributes.validFrom",
-  VALID_UNTIL: "certSign.attributes.validUntil",
-  SIGNATURE_ALGORITHM: "certSign.attributes.signatureAlgorithm",
-  SIGNING_TIME: "certSign.attributes.signingTime",
-  REASON: "certSign.attributes.reason",
-  LOCATION: "certSign.attributes.location",
-};
-
-/**
- * Fields ticked when the user first opens the field picker. Mirrors what the backend
- * draws by default, so ticking nothing and ticking these produce the same signature.
- */
-export const DEFAULT_VISIBLE_ATTRIBUTES: CertificateAttribute[] = [
-  "SUBJECT_COMMON_NAME",
-  "SIGNING_TIME",
-  "REASON",
-];
-
-/** Size of the box created when the user first enables placement, in PDF points. */
-export const DEFAULT_SIGNATURE_BOX = { width: 200, height: 60 } as const;
-
-/**
- * Where the logo can sit inside the signature box.
- *
- * The identifiers must match the backend's SignatureLogoPosition enum exactly - they
- * travel over the wire as-is.
- */
-export const SIGNATURE_LOGO_POSITIONS = [
-  "LEFT",
-  "RIGHT",
-  "TOP",
-  "BOTTOM",
-  "BEHIND",
-] as const;
-
-export type SignatureLogoPosition = (typeof SIGNATURE_LOGO_POSITIONS)[number];
-
-/** Matches the backend default, so not choosing and choosing LEFT look the same. */
-export const DEFAULT_SIGNATURE_LOGO_POSITION: SignatureLogoPosition = "LEFT";
-
-/** English shown until a locale supplies its own wording. */
-export const LOGO_POSITION_FALLBACKS: Record<SignatureLogoPosition, string> = {
-  LEFT: "Left of the text",
-  RIGHT: "Right of the text",
-  TOP: "Above the text",
-  BOTTOM: "Below the text",
-  BEHIND: "Behind the text (watermark)",
+  SUBJECT_ORGANISATION: {
+    key: "certSign.stamp.organisation",
+    english: "Organisation:",
+  },
+  SUBJECT_ORGANISATIONAL_UNIT: {
+    key: "certSign.stamp.organisationalUnit",
+    english: "Unit:",
+  },
+  SUBJECT_COUNTRY: { key: "certSign.stamp.country", english: "Country:" },
+  SUBJECT_EMAIL: { key: "certSign.stamp.email", english: "Email:" },
+  ISSUER_COMMON_NAME: { key: "certSign.stamp.issuedBy", english: "Issued by:" },
+  ISSUER_ORGANISATION: {
+    key: "certSign.stamp.issuerOrganisation",
+    english: "Issuer organisation:",
+  },
+  SERIAL_NUMBER: { key: "certSign.stamp.serial", english: "Serial:" },
+  VALID_FROM: { key: "certSign.stamp.validFrom", english: "Valid from:" },
+  VALID_UNTIL: { key: "certSign.stamp.validUntil", english: "Valid until:" },
+  SIGNATURE_ALGORITHM: {
+    key: "certSign.stamp.algorithm",
+    english: "Algorithm:",
+  },
 };

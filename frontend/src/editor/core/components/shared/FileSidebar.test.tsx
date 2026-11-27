@@ -95,6 +95,9 @@ vi.mock("@editor/components/filesPage/DeleteFilesDialog", () => ({
 vi.mock("@editor/components/shared/RenameFileDialog", () => ({
   RenameFileDialog: () => null,
 }));
+vi.mock("@editor/components/shared/useFileSources", () => ({
+  useFileSources: () => ({ sources: [], pickers: null }),
+}));
 vi.mock("@editor/components/shared/SidebarChecklistSlot", () => ({
   SidebarChecklistSlot: () => null,
 }));
@@ -131,7 +134,7 @@ vi.mock("@editor/contexts/FilesPageContext", () => ({
   useFilesPage: () => ({}),
 }));
 vi.mock("@editor/services/bulkAddProgress", () => ({
-  useBulkAddProgress: () => ({ total: 0, done: 0 }),
+  useVisibleBulkAddProgress: () => null,
 }));
 vi.mock("@editor/services/fileStorage", () => ({
   fileStorage: {},
