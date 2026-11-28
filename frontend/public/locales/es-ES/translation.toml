@@ -2757,7 +2757,7 @@ title = "Campos del certificado"
 
 [certSign.appearance.graphic]
 add = "Añadir"
-certificateDetails = "Datos del certificado"
+certificateDetails = "Datos del certificado (DN)"
 image = "Imagen"
 imageHint = "Una firma manuscrita o un sello, en PNG o JPEG"
 imageTitle = "Imagen de la firma"
