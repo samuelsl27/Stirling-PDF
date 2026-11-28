@@ -124,6 +124,11 @@ test("the sidebar native picker keeps its path after reload and saves in place",
 
 test("the Files page upload uses the native picker", async ({ page }) => {
   await page.getByTestId("my-files-button").click();
+  // Recents is read-only; the upload CTA lives in the library view.
+  await page
+    .getByRole("navigation", { name: "File sources", exact: true })
+    .getByRole("button", { name: /^(Stirling library|Local files)$/ })
+    .click();
   await page
     .getByRole("button", { name: "Upload files", exact: true })
     .first()
@@ -133,7 +138,7 @@ test("the Files page upload uses the native picker", async ({ page }) => {
 
 test("the sidebar add button uses the native picker", async ({ page }) => {
   await page.getByTestId("pdf-library-add-files").click();
-  await page.getByTestId("pdf-library-add-from-computer").click();
+  await page.getByTestId("add-files-from-computer").click();
   await expectLinked(page);
 });
 

@@ -1,6 +1,5 @@
+import i18n, { type TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import i18next from "i18next";
-import { CERTIFICATE_ATTRIBUTE_LABEL_KEYS } from "@editor/constants/certSignConstants";
 import {
   useToolOperation,
   defineSingleFileTool,
@@ -12,7 +11,13 @@ import {
   type ToolEndpoint,
 } from "@editor/hooks/tools/shared/toolApiMapping";
 import { createStandardErrorHandler } from "@editor/utils/toolErrorHandler";
+import type { StampLabels } from "@editor/services/signatureStampPreview";
 import { DEVICE_LOCAL_REQUEST } from "@editor/constants/deviceLocalEndpoints";
+import {
+  CERTIFICATE_FIELD_LABELS,
+  type CertificateField,
+  type GraphicPosition,
+} from "@editor/constants/certSignConstants";
 import {
   validateCertSignParameters,
   CertSignParameters,
@@ -59,99 +64,96 @@ export const certSignToApiParams = (
   return withSignatureAppearance(apiParams, parameters);
 };
 
-// Signature appearance fields are only sent when the visible signature is
-// enabled, matching the original form behaviour.
+// Name, reason and location go into the signature dictionary, so they are sent
+// for invisible signatures too; placement and logo only affect the visible stamp.
 const withSignatureAppearance = (
   apiParams: CertSignApiParams,
   parameters: CertSignParameters,
 ): CertSignApiParams => {
+  if (parameters.reason) apiParams.reason = parameters.reason;
+  if (parameters.location) apiParams.location = parameters.location;
+  if (parameters.name) apiParams.name = parameters.name;
   if (parameters.showSignature) {
     apiParams.showSignature = true;
-    apiParams.reason = parameters.reason;
-    apiParams.location = parameters.location;
-    apiParams.name = parameters.name;
-    apiParams.pageNumber = parameters.pageNumber;
-    apiParams.showLogo = parameters.showLogo;
-
-    // Sent only when the logo is on: a position with the logo hidden means nothing,
-    // and omitting it keeps the request as it was before the option existed.
-    if (parameters.showLogo) {
-      apiParams.logoPosition = parameters.logoPosition;
+    apiParams.stampGraphic = parameters.stampGraphic;
+    apiParams.showWatermark = parameters.showWatermark;
+    if (parameters.showCertificateDetails) {
+      apiParams.showCertificateDetails = true;
     }
-
-    // Only sent when the user actually placed a box. Omitting these keeps the
-    // backend's original placement, so the tool still works without drawing one.
-    const area = parameters.signatureArea;
-    if (area) {
-      apiParams.signatureX = area.x;
-      apiParams.signatureY = area.y;
-      apiParams.signatureWidth = area.width;
-      apiParams.signatureHeight = area.height;
+    const position = sentGraphicPosition(parameters);
+    if (position) apiParams.graphicPosition = position;
+    if (parameters.certificateFields?.length) {
+      apiParams.certificateFields = parameters.certificateFields;
     }
-    if (parameters.visibleAttributes.length > 0) {
-      apiParams.visibleAttributes = parameters.visibleAttributes;
-      const labels = attributeLabels(parameters.visibleAttributes);
-      if (labels) {
-        apiParams.visibleAttributeLabels = labels;
+    if (parameters.markAllPages) apiParams.markAllPages = true;
+    if (parameters.fieldName) {
+      apiParams.fieldName = parameters.fieldName;
+    } else {
+      apiParams.pageNumber = parameters.pageNumber;
+      if (parameters.stampBox) {
+        apiParams.x = parameters.stampBox.x;
+        apiParams.y = parameters.stampBox.y;
+        apiParams.width = parameters.stampBox.width;
+        apiParams.height = parameters.stampBox.height;
       }
-    }
-    // Only meaningful alongside a box: without one there is no shape to repeat.
-    if (parameters.markAllPages && area) {
-      apiParams.markAllPages = true;
     }
   }
   return apiParams;
 };
 
-/**
- * The labels to stamp in front of each field, in the order the fields were chosen.
- *
- * <p>The signature is baked into the document, so it is stamped in the language the person signing
- * is reading rather than the server's, and these are the same labels the field picker shows. The
- * bare i18next instance is used rather than the app's own module: importing that from here would
- * pull the whole bootstrap into anything that touches this file. Returns null when translations
- * are not loaded, which leaves the backend to fall back to English.
- */
-const attributeLabels = (
-  attributes: CertSignParameters["visibleAttributes"],
-): string[] | null => {
-  if (!i18next.isInitialized) {
-    return null;
+/** The position to ask for, or nothing when the server's own choice applies. */
+export const sentGraphicPosition = ({
+  stampGraphic,
+  graphicPosition,
+}: CertSignParameters): GraphicPosition | undefined => {
+  if (stampGraphic === "NONE" || graphicPosition === "AUTO") return undefined;
+  // The server rejects BEHIND without an image to put there.
+  if (graphicPosition === "BEHIND" && stampGraphic !== "IMAGE") {
+    return undefined;
   }
-  const labels = attributes.map((attribute) => {
-    const key = CERTIFICATE_ATTRIBUTE_LABEL_KEYS[attribute];
-    const label = i18next.t(key);
-    return label === key ? "" : label;
-  });
-  return labels.some((label) => label !== "") ? labels : null;
+  return graphicPosition;
 };
 
 // Select the keystore File uploads for the chosen certificate type. AUTO mode
 // (server certificate) uploads no keystore.
-const certSignFiles = (parameters: CertSignParameters): FormDataFiles => {
-  // The logo has nothing to do with where the certificate comes from, so it rides
-  // along in every mode, server certificate included.
-  const logo: FormDataFiles =
-    parameters.showSignature && parameters.showLogo && parameters.logoImage
-      ? { logoImage: parameters.logoImage }
-      : {};
+const certSignFiles = (parameters: CertSignParameters): FormDataFiles => ({
+  ...keystoreFiles(parameters),
+  ...(parameters.showSignature && parameters.stampGraphic === "IMAGE"
+    ? { signatureImage: parameters.signatureImage }
+    : {}),
+});
 
-  if (parameters.signMode === "AUTO") return logo;
+const keystoreFiles = (parameters: CertSignParameters): FormDataFiles => {
+  if (parameters.signMode === "AUTO") return {};
 
   switch (parameters.certType) {
     case "PEM":
       return {
-        ...logo,
         privateKeyFile: parameters.privateKeyFile,
         certFile: parameters.certFile,
       };
     case "PKCS12":
     case "PFX":
-      return { ...logo, p12File: parameters.p12File };
+      return { p12File: parameters.p12File };
     case "JKS":
-      return { ...logo, jksFile: parameters.jksFile };
+      return { jksFile: parameters.jksFile };
     default:
-      return logo;
+      return {};
+  }
+};
+
+const signModeForCertType = (
+  certType: CertSignApiParams["certType"],
+): CertSignParameters["signMode"] => {
+  switch (certType) {
+    case "SERVER":
+      return "AUTO";
+    case "WINDOWS_STORE":
+    case "MACOS_KEYCHAIN":
+    case "PKCS11":
+      return "DEVICE";
+    default:
+      return "MANUAL";
   }
 };
 
@@ -162,7 +164,7 @@ export const certSignFromApiParams = (
   apiParams: CertSignApiParams,
 ): Partial<CertSignParameters> => {
   const result: Partial<CertSignParameters> = {
-    signMode: apiParams.certType === "SERVER" ? "AUTO" : "MANUAL",
+    signMode: signModeForCertType(apiParams.certType),
     showSignature: apiParams.showSignature ?? defaultParameters.showSignature,
   };
 
@@ -183,58 +185,124 @@ export const certSignFromApiParams = (
   if (apiParams.pageNumber !== undefined) {
     result.pageNumber = apiParams.pageNumber;
   }
-  if (apiParams.showLogo !== undefined) result.showLogo = apiParams.showLogo;
-  if (apiParams.logoPosition !== undefined) {
-    result.logoPosition = apiParams.logoPosition;
+  // An image graphic cannot be restored without its file, so it comes back as the name.
+  if (apiParams.stampGraphic === "NONE") result.stampGraphic = "NONE";
+  if (apiParams.showWatermark !== undefined) {
+    result.showWatermark = apiParams.showWatermark;
+  } else if (apiParams.showLogo !== undefined) {
+    result.showWatermark = apiParams.showLogo;
   }
-
-  // A stored step only carries a box if all four values are present; a partial one
-  // would silently reposition the signature somewhere the author never chose.
-  if (
-    apiParams.signatureX !== undefined &&
-    apiParams.signatureY !== undefined &&
-    apiParams.signatureWidth !== undefined &&
-    apiParams.signatureHeight !== undefined
-  ) {
-    result.signatureArea = {
-      x: apiParams.signatureX,
-      y: apiParams.signatureY,
-      width: apiParams.signatureWidth,
-      height: apiParams.signatureHeight,
-    };
+  if (apiParams.showCertificateDetails !== undefined) {
+    result.showCertificateDetails = apiParams.showCertificateDetails;
   }
-  if (apiParams.visibleAttributes !== undefined) {
-    result.visibleAttributes = apiParams.visibleAttributes;
+  if (apiParams.fieldName !== undefined) result.fieldName = apiParams.fieldName;
+  if (apiParams.graphicPosition !== undefined) {
+    result.graphicPosition = apiParams.graphicPosition;
+  }
+  if (apiParams.certificateFields !== undefined) {
+    result.certificateFields = apiParams.certificateFields;
   }
   if (apiParams.markAllPages !== undefined) {
     result.markAllPages = apiParams.markAllPages;
+  }
+  if (
+    apiParams.x !== undefined &&
+    apiParams.y !== undefined &&
+    apiParams.width !== undefined &&
+    apiParams.height !== undefined
+  ) {
+    result.stampBox = {
+      x: apiParams.x,
+      y: apiParams.y,
+      width: apiParams.width,
+      height: apiParams.height,
+    };
   }
 
   return result;
 };
 
-// Build form data for signing
+/** The stamp's labels in the UI language; the signed-by one keeps the {name} slot the server fills. */
+export const stampLabels = (t: TFunction = i18n.t): StampLabels => ({
+  signedByLabel: t("certSign.stamp.signedBy", "Digitally signed by {{name}}", {
+    name: "{name}",
+    interpolation: { escapeValue: false },
+  }),
+  dateLabel: t("certSign.stamp.date", "Date:"),
+  reasonLabel: t("certSign.stamp.reason", "Reason:"),
+  locationLabel: t("certSign.stamp.location", "Location:"),
+});
+
+/** The labels of the chosen certificate fields in the UI language, in the same order. */
+export const certificateFieldLabels = (
+  fields: CertificateField[],
+  t: TFunction = i18n.t,
+): string[] =>
+  fields.map((field) => {
+    const { key, english } = CERTIFICATE_FIELD_LABELS[field];
+    return t(key, english);
+  });
+
+// The stamp's words are fixed when signing, in the signer's language and time zone, so they
+// are added here rather than stored with the step: a saved automation signs in whoever runs it.
+const withStampLanguage = (
+  apiParams: CertSignApiParams,
+  parameters: CertSignParameters,
+): CertSignApiParams =>
+  parameters.showSignature
+    ? {
+        ...apiParams,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        ...stampLabels(),
+        ...(parameters.certificateFields?.length
+          ? {
+              certificateFieldLabels: certificateFieldLabels(
+                parameters.certificateFields,
+              ),
+            }
+          : {}),
+      }
+    : apiParams;
+
+// What the user reviewed belongs to this signing only: a saved step that pinned a fingerprint
+// would fail once the server certificate is regenerated, so it is never stored with the step.
+const withReviewedSigner = (
+  apiParams: CertSignApiParams,
+  parameters: CertSignParameters,
+): CertSignApiParams => ({
+  ...apiParams,
+  ...(parameters.signMode !== "MANUAL" && parameters.expectedCertificateSha256
+    ? { expectedCertificateSha256: parameters.expectedCertificateSha256 }
+    : {}),
+  ...(parameters.signMode === "DEVICE" &&
+  parameters.certType === "MACOS_KEYCHAIN" &&
+  parameters.requireToken
+    ? { requireToken: true }
+    : {}),
+});
+
 export const buildCertSignFormData = (
   parameters: CertSignParameters,
   file: File,
 ): FormData =>
-  objectToFormData(certSignToApiParams(parameters), {
-    fileInput: file,
-    ...certSignFiles(parameters),
-  });
+  objectToFormData(
+    withReviewedSigner(
+      withStampLanguage(certSignToApiParams(parameters), parameters),
+      parameters,
+    ),
+    {
+      fileInput: file,
+      ...certSignFiles(parameters),
+    },
+  );
 
-/**
- * Signing with a key held by this machine has to happen on this machine.
- *
- * The endpoint is the same either way, so the path cannot carry the distinction:
- * only the chosen certificate type says whether the key is an uploaded file
- * (which any backend can use) or lives in the Windows store, the macOS keychain
- * or a plugged-in token (which only the local one can reach).
- */
+// The path is the same whether the key is an uploaded file or lives on this machine, so only
+// the certificate type says that a run must not be replayed or sent to a server.
 const certSignRequestConfig = (parameters: CertSignParameters) =>
-  parameters.certType === "WINDOWS_STORE" ||
-  parameters.certType === "MACOS_KEYCHAIN" ||
-  parameters.certType === "PKCS11"
+  parameters.signMode !== "AUTO" &&
+  (parameters.certType === "WINDOWS_STORE" ||
+    parameters.certType === "MACOS_KEYCHAIN" ||
+    parameters.certType === "PKCS11")
     ? DEVICE_LOCAL_REQUEST
     : {};
 

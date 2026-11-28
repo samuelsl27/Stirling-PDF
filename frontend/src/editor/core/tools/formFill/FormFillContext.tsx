@@ -30,8 +30,8 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { useDebouncedCallback } from "@mantine/hooks";
-import { isAxiosError } from "axios";
 import { applyStagedGeometry } from "@editor/tools/formFill/formCoordinateUtils";
+import { resolveToolErrorMessage } from "@editor/utils/toolErrorHandler";
 import type {
   FormField,
   FormFillState,
@@ -686,13 +686,8 @@ export function FormFillProvider({
           dispatch({ type: "MARK_DIRTY" });
         }
       } catch (err) {
+        const msg = await resolveToolErrorMessage(err);
         if (fetchVersionRef.current !== version) return; // stale
-        const msg =
-          (isAxiosError<{ message?: string }>(err)
-            ? err.response?.data?.message
-            : undefined) ||
-          (err instanceof Error ? err.message : undefined) ||
-          "Failed to fetch form fields";
         dispatch({ type: "FETCH_ERROR", error: msg });
       }
     },

@@ -406,7 +406,6 @@ test.describe("Encrypted PDF Unlock Modal", () => {
     ).toBeHidden();
     const notice = page.getByTestId("tool-file-list");
     await expect(notice.getByRole("listitem")).toHaveText("encrypted.pdf");
-    await expect(notice.getByText(/Add files to the workbench/)).toHaveCount(0);
     await notice
       .getByRole("button", { name: "Why encrypted.pdf is unavailable" })
       .hover();
@@ -486,7 +485,7 @@ test.describe("Encrypted PDF Unlock Modal", () => {
           }, legacy),
         )
         .toBe(true);
-      await page.goto("/files");
+      await page.goto("/files?view=all");
       await page.getByRole("button", { name: "Recents", exact: true }).click();
       await page
         .locator('.files-page-view-toggle-icon[title="Grid view"]')

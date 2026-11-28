@@ -1,93 +1,38 @@
-import {
-  type ComponentProps,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import {
-  Stack,
-  Text,
-  TextInput,
-  NumberInput,
-  Divider,
-  Checkbox,
-  Alert,
-  Group,
-} from "@mantine/core";
-import { Icon } from "@editor/ui/Icon";
-import { Button } from "@editor/ui/Button";
-import { ActionIcon } from "@editor/ui/ActionIcon";
-import { Select } from "@editor/ui/Select";
-import { FormField } from "@editor/ui/FormField";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Group, Stack, Text, TextInput, NumberInput } from "@mantine/core";
 import { useTranslation } from "react-i18next";
-import { CertSignParameters } from "@editor/hooks/tools/certSign/useCertSignParameters";
-import { useAllFiles } from "@editor/contexts/FileContext";
-import { FileStoreContext } from "@editor/contexts/file/contexts";
-import FileUploadButton from "@editor/components/shared/FileUploadButton";
-import SignaturePlacementPicker from "@editor/components/tools/certSign/SignaturePlacementPicker";
-import SignatureAttributePicker from "@editor/components/tools/certSign/SignatureAttributePicker";
+import type {
+  CertSignParameters,
+  StampGraphic,
+} from "@editor/hooks/tools/certSign/useCertSignParameters";
+import type { CertSignStampPlacement } from "@editor/hooks/tools/certSign/useCertSignStampPlacement";
 import {
-  DEFAULT_SIGNATURE_LOGO_POSITION,
-  LOGO_POSITION_FALLBACKS,
-  SIGNATURE_LOGO_POSITIONS,
-  type SignatureLogoPosition,
-} from "@editor/constants/certSignConstants";
-import {
-  SIGNATURE_PLACEMENT_CANCEL_EVENT,
-  SIGNATURE_PLACEMENT_DONE_EVENT,
-  SIGNATURE_PLACEMENT_START_EVENT,
-  showSignaturePlacement,
-  type SignaturePlacementResult,
-} from "@editor/constants/signaturePlacementEvents";
-
-type PlacementPickerProps = Omit<
-  ComponentProps<typeof SignaturePlacementPicker>,
-  "file" | "fileStub" | "thumbnailUrl"
->;
-
-const PlacementPickerWithWorkbenchFile = (props: PlacementPickerProps) => {
-  const { files, fileStubs } = useAllFiles();
-  const file = useMemo(() => (files.length > 0 ? files[0] : null), [files]);
-  const stub = useMemo(
-    () => (fileStubs.length > 0 ? fileStubs[0] : null),
-    [fileStubs],
-  );
-
-  return (
-    <SignaturePlacementPicker
-      {...props}
-      file={file}
-      fileStub={stub}
-      thumbnailUrl={stub?.thumbnailUrl ?? null}
-    />
-  );
-};
-
-/**
- * The placement picker, wired to the workbench document when there is one.
- *
- * These settings also render in the pipeline builder, which configures a run before any
- * document exists and so mounts no file context. The file hooks throw outside their
- * provider, so the subscription lives in a child that is mounted only when the provider
- * is present; without it the picker still draws, over an empty page.
- */
-const SignaturePlacementPickerForTool = (props: PlacementPickerProps) => {
-  const hasWorkbenchFiles = useContext(FileStoreContext) !== undefined;
-
-  return hasWorkbenchFiles ? (
-    <PlacementPickerWithWorkbenchFile {...props} />
-  ) : (
-    <SignaturePlacementPicker
-      {...props}
-      file={null}
-      fileStub={null}
-      thumbnailUrl={null}
-    />
-  );
-};
+  CertificateFieldChoice,
+  GraphicPositionChoice,
+  RepeatOnPagesChoice,
+} from "@editor/components/tools/certSign/StampExtrasSettings";
 import { privateContentClassName } from "@editor/components/shared/privateContentClassName";
+import { infoLabelProps } from "@editor/components/tools/shared/infoLabel";
+import { Banner } from "@editor/ui/Banner";
+import { Button } from "@editor/ui/Button";
+import { Icon } from "@editor/ui/Icon";
+import { SegmentedControl } from "@editor/ui/SegmentedControl";
+import { ActionIcon } from "@editor/ui/ActionIcon";
+import { ToggleSwitch } from "@editor/ui/ToggleSwitch";
+import {
+  SignatureImagePicker,
+  signatureImageFile,
+} from "@editor/components/shared/signatureFields/SignatureImagePicker";
+import { useSignatureLibrary } from "@editor/components/tools/sign/wallet/useSignatureLibrary";
+import { CreateSignatureModal } from "@editor/components/tools/sign/createSignature/CreateSignatureModal";
+import { defaultSignatureName } from "@editor/components/tools/sign/createSignature/createTabs";
+import type {
+  CreatedSignature,
+  SaveChoice,
+} from "@editor/components/tools/sign/createSignature/types";
+import { uniqueName } from "@editor/utils/uniqueName";
+import { SignatureFieldList } from "@editor/components/shared/signatureFields/SignatureFieldList";
+import { StampPreviewFrame } from "@editor/components/shared/signatureFields/StampPreviewFrame";
 
 interface SignatureAppearanceSettingsProps {
   parameters: CertSignParameters;
@@ -96,396 +41,486 @@ interface SignatureAppearanceSettingsProps {
     value: CertSignParameters[K],
   ) => void;
   disabled?: boolean;
+  /** Field choice and on-page placement; absent where no single document is open. */
+  placement?: CertSignStampPlacement;
+  /** The stamp as it will be drawn, shown above the options that change it. */
+  preview?: string | null;
 }
 
 const SignatureAppearanceSettings = ({
   parameters,
   onParameterChange,
   disabled = false,
+  placement,
+  preview,
 }: SignatureAppearanceSettingsProps) => {
   const { t } = useTranslation();
-  const [isPlacing, setIsPlacing] = useState(false);
 
-  const startPlacement = useCallback(() => {
-    setIsPlacing(true);
-    window.dispatchEvent(new CustomEvent(SIGNATURE_PLACEMENT_START_EVENT));
-  }, []);
-
-  const cancelPlacement = useCallback(() => {
-    setIsPlacing(false);
-    window.dispatchEvent(new CustomEvent(SIGNATURE_PLACEMENT_CANCEL_EVENT));
-  }, []);
-
-  // The page the box was drawn on becomes the signed page: having dragged a box onto
-  // page 5 and then signed page 1 would be a surprise, and the box is the more
-  // deliberate of the two choices.
-  useEffect(() => {
-    const onDone = (event: Event) => {
-      const { detail } = event as CustomEvent<SignaturePlacementResult>;
-      if (!detail) return;
-      setIsPlacing(false);
-      onParameterChange("signatureArea", detail.area);
-      onParameterChange("pageNumber", detail.pageNumber);
-    };
-    const onCancel = () => setIsPlacing(false);
-
-    window.addEventListener(SIGNATURE_PLACEMENT_DONE_EVENT, onDone);
-    window.addEventListener(SIGNATURE_PLACEMENT_CANCEL_EVENT, onCancel);
-    return () => {
-      window.removeEventListener(SIGNATURE_PLACEMENT_DONE_EVENT, onDone);
-      window.removeEventListener(SIGNATURE_PLACEMENT_CANCEL_EVENT, onCancel);
-    };
-  }, [onParameterChange]);
-
-  // Leaving the panel mid-drag would strand the viewer in placement mode with no way
-  // back, since the button that cancels it has gone.
-  useEffect(() => cancelPlacement, [cancelPlacement]);
-
-  // The box stays on the page while the appearance is set up, so the options can be
-  // judged against the space they fill. Signing collapses this panel, which takes it away.
-  const { showSignature, signatureArea, pageNumber } = parameters;
-  useEffect(() => {
-    showSignaturePlacement(
-      showSignature && signatureArea
-        ? { pageNumber, area: signatureArea }
-        : null,
-    );
-  }, [showSignature, signatureArea, pageNumber]);
-  useEffect(() => () => showSignaturePlacement(null), []);
-
-  // The request sends the marks only with a box, so the panel shows them only then.
-  const repeatsOnEveryPage =
-    parameters.markAllPages && !!parameters.signatureArea;
-
-  // Cleared with the box, so the next box does not bring the marks back unasked.
-  const clearArea = useCallback(() => {
-    onParameterChange("signatureArea", undefined);
-    onParameterChange("markAllPages", false);
-  }, [onParameterChange]);
+  const details = (
+    <SignatureDetails
+      parameters={parameters}
+      onParameterChange={onParameterChange}
+      disabled={disabled}
+    />
+  );
 
   return (
     <Stack gap="md">
-      {/* Signature Visibility */}
-      <Stack gap="sm">
-        <div style={{ display: "flex", gap: "4px" }}>
-          <Button
-            accent={!parameters.showSignature ? "default" : "neutral"}
-            variant={!parameters.showSignature ? "primary" : "secondary"}
-            onClick={() => onParameterChange("showSignature", false)}
-            disabled={disabled}
-            style={{
-              flex: 1,
-              height: "auto",
-              minHeight: "40px",
-              fontSize: "11px",
-            }}
-          >
-            <div
-              style={{
-                textAlign: "center",
-                lineHeight: "1.1",
-                fontSize: "11px",
-              }}
-            >
-              {t("certSign.appearance.invisible", "Invisible")}
-            </div>
-          </Button>
-          <Button
-            accent={parameters.showSignature ? "default" : "neutral"}
-            variant={parameters.showSignature ? "primary" : "secondary"}
-            onClick={() => onParameterChange("showSignature", true)}
-            disabled={disabled}
-            style={{
-              flex: 1,
-              height: "auto",
-              minHeight: "40px",
-              fontSize: "11px",
-            }}
-          >
-            <div
-              style={{
-                textAlign: "center",
-                lineHeight: "1.1",
-                fontSize: "11px",
-              }}
-            >
-              {t("certSign.appearance.visible", "Visible")}
-            </div>
-          </Button>
-        </div>
-      </Stack>
+      <ToggleSwitch
+        checked={parameters.showSignature}
+        onChange={(checked) => onParameterChange("showSignature", checked)}
+        label={t("certSign.appearance.showOnPage", "Show signature on page")}
+        disabled={disabled}
+      />
 
-      {/* Visible Signature Options */}
-      {parameters.showSignature && (
+      {parameters.showSignature ? (
         <Stack gap="sm">
-          <Text size="sm" fw={500}>
-            {t("certSign.appearance.options.title", "Signature Details")}
-          </Text>
-          <TextInput
-            label={t("certSign.reason", "Reason")}
-            value={parameters.reason}
-            className={privateContentClassName}
-            onChange={(event) =>
-              onParameterChange("reason", event.currentTarget.value)
-            }
-            disabled={disabled}
-          />
-          <TextInput
-            label={t("certSign.location", "Location")}
-            value={parameters.location}
-            className={privateContentClassName}
-            onChange={(event) =>
-              onParameterChange("location", event.currentTarget.value)
-            }
-            disabled={disabled}
-          />
-          <TextInput
-            label={t("certSign.name", "Name")}
-            description={t(
-              "certSign.nameDescription",
-              "Saved in the signature's details. The visible signature shows the name on the certificate.",
-            )}
-            value={parameters.name}
-            className={privateContentClassName}
-            onChange={(event) =>
-              onParameterChange("name", event.currentTarget.value)
-            }
-            disabled={disabled}
-          />
-          <NumberInput
-            label={t("certSign.pageNumber", "Page Number")}
-            value={parameters.pageNumber}
-            onChange={(value) => {
-              const next = typeof value === "number" ? value : 1;
-              // The box is in the coordinates of the page it was drawn on.
-              if (next !== parameters.pageNumber && parameters.signatureArea) {
-                clearArea();
-              }
-              onParameterChange("pageNumber", next);
-            }}
-            min={1}
-            disabled={disabled}
-          />
-          <Stack gap="xs">
-            <Text size="sm" fw={500}>
-              {t("certSign.logoTitle", "Logo")}
-            </Text>
-            <div style={{ display: "flex", gap: "4px" }}>
-              <Button
-                accent={!parameters.showLogo ? "default" : "neutral"}
-                variant={!parameters.showLogo ? "primary" : "secondary"}
-                onClick={() => onParameterChange("showLogo", false)}
-                disabled={disabled}
-                style={{
-                  flex: 1,
-                  height: "auto",
-                  minHeight: "40px",
-                  fontSize: "11px",
-                }}
-              >
-                <div
-                  style={{
-                    textAlign: "center",
-                    lineHeight: "1.1",
-                    fontSize: "11px",
-                  }}
-                >
-                  {t("certSign.noLogo", "No Logo")}
-                </div>
-              </Button>
-              <Button
-                accent={parameters.showLogo ? "default" : "neutral"}
-                variant={parameters.showLogo ? "primary" : "secondary"}
-                onClick={() => onParameterChange("showLogo", true)}
-                disabled={disabled}
-                style={{
-                  flex: 1,
-                  height: "auto",
-                  minHeight: "40px",
-                  fontSize: "11px",
-                }}
-              >
-                <div
-                  style={{
-                    textAlign: "center",
-                    lineHeight: "1.1",
-                    fontSize: "11px",
-                  }}
-                >
-                  {t("certSign.showLogo", "Show Logo")}
-                </div>
-              </Button>
-            </div>
-            {parameters.showLogo && (
-              <Stack gap="xs">
-                <FileUploadButton
-                  file={parameters.logoImage}
-                  onChange={(file) =>
-                    onParameterChange("logoImage", file || undefined)
-                  }
-                  accept="image/png,image/jpeg"
-                  disabled={disabled}
-                  placeholder={t(
-                    "certSign.logo.choose",
-                    "Choose a logo image (PNG or JPEG)",
-                  )}
-                />
-                <Text c="dimmed" size="xs">
-                  {t(
-                    "certSign.logo.hint",
-                    "Leave empty to use the built-in Stirling PDF mark.",
-                  )}
-                </Text>
-                <FormField
-                  label={t("certSign.logo.positionLabel", "Logo position")}
-                >
-                  <Select
-                    options={SIGNATURE_LOGO_POSITIONS.map((position) => ({
-                      value: position,
-                      label: t(
-                        `certSign.logo.position.${position}`,
-                        LOGO_POSITION_FALLBACKS[position],
-                      ),
-                    }))}
-                    value={
-                      parameters.logoPosition ?? DEFAULT_SIGNATURE_LOGO_POSITION
-                    }
-                    onChange={(value) =>
-                      onParameterChange(
-                        "logoPosition",
-                        (value as SignatureLogoPosition | null) ??
-                          DEFAULT_SIGNATURE_LOGO_POSITION,
-                      )
-                    }
-                    disabled={disabled}
-                  />
-                </FormField>
-              </Stack>
-            )}
-          </Stack>
-
-          <Divider />
-
-          <Stack gap="xs">
-            <Group justify="space-between" align="center">
-              <Text size="sm" fw={500}>
-                {t("certSign.placement.title", "Signature position")}
-              </Text>
-              {/* Always present, disabled until there is a box to clear. A control that
-                  only appears once a box is placed grows the panel at exactly the wrong
-                  moment - it is what pushed the run button out of sight the instant the
-                  user finished drawing. Same reset the thumbnail picker already uses. */}
-              <ActionIcon
-                variant="secondary"
-                onClick={clearArea}
-                disabled={disabled || isPlacing || !parameters.signatureArea}
-                title={t(
-                  "certSign.placement.reset",
-                  "Use the default position",
-                )}
-                aria-label={t(
-                  "certSign.placement.reset",
-                  "Use the default position",
-                )}
-              >
-                <Icon name="rotate-ccw" size={16} />
-              </ActionIcon>
-            </Group>
-
-            <Button
-              variant={isPlacing ? "primary" : "secondary"}
-              accent={isPlacing ? "brand" : "neutral"}
-              onClick={isPlacing ? cancelPlacement : startPlacement}
-              disabled={disabled}
-            >
-              {isPlacing
-                ? t("certSign.placement.cancel", "Cancel — press Esc")
-                : t("certSign.placement.draw", "Draw the box on the document")}
-            </Button>
-
-            <Text size="xs" c="dimmed">
-              {isPlacing
-                ? t(
-                    "certSign.placement.dragging",
-                    "Drag a box on the page where the signature should go.",
-                  )
-                : parameters.signatureArea
-                  ? t("certSign.placement.placed", {
-                      defaultValue:
-                        "Placed on page {{page}} · {{width}} × {{height}} pt",
-                      page: parameters.pageNumber,
-                      width: Math.round(parameters.signatureArea.width),
-                      height: Math.round(parameters.signatureArea.height),
-                    })
-                  : t(
-                      "certSign.placement.default",
-                      "Not placed — the signature goes where it always has, on the page above.",
-                    )}
-            </Text>
-          </Stack>
-
-          <Divider />
-
-          <Stack gap="xs">
-            <Checkbox
-              label={t(
-                "certSign.markAllPages.label",
-                "Repeat it on every page",
+          {preview && (
+            <StampPreviewFrame
+              src={preview}
+              alt={t(
+                "certSign.appearance.placement.stampPreview",
+                "How the signature will look",
               )}
-              checked={repeatsOnEveryPage}
-              onChange={(event) =>
-                onParameterChange("markAllPages", event.currentTarget.checked)
-              }
-              disabled={disabled || !parameters.signatureArea}
             />
-            {!parameters.signatureArea && (
-              <Text size="xs" c="dimmed">
-                {t(
-                  "certSign.markAllPages.needsBox",
-                  "Draw the box first, so there is a shape to repeat.",
-                )}
-              </Text>
+          )}
+          <GraphicChoice
+            parameters={parameters}
+            onParameterChange={onParameterChange}
+            disabled={disabled}
+          />
+          <GraphicPositionChoice
+            parameters={parameters}
+            onParameterChange={onParameterChange}
+            disabled={disabled}
+          />
+          <ToggleSwitch
+            checked={parameters.showWatermark}
+            onChange={(checked) => onParameterChange("showWatermark", checked)}
+            label={t(
+              "certSign.appearance.graphic.watermark",
+              "Logo behind signature",
             )}
-            {repeatsOnEveryPage && (
-              <Alert color="yellow" variant="light" p="xs">
-                <Text size="xs">
-                  {t(
-                    "certSign.markAllPages.warning",
-                    "A PDF can only be signed in one place. The other pages get a matching mark that looks the same but is not a signature.",
-                  )}
-                </Text>
-              </Alert>
+            disabled={disabled}
+          />
+          <ToggleSwitch
+            checked={parameters.showCertificateDetails}
+            onChange={(checked) =>
+              onParameterChange("showCertificateDetails", checked)
+            }
+            label={t(
+              "certSign.appearance.graphic.certificateDetails",
+              "Certificate details",
             )}
-          </Stack>
-
-          {/* The page thumbnail is only useful when the same position repeats on every
-              page; for a single page the user places the box on the document itself. */}
-          {repeatsOnEveryPage && (
-            <>
-              <Divider />
-              <SignaturePlacementPickerForTool
-                pageNumber={parameters.pageNumber}
-                signatureArea={parameters.signatureArea}
-                onSignatureAreaChange={(area) =>
-                  area ? onParameterChange("signatureArea", area) : clearArea()
-                }
+            disabled={disabled}
+          />
+          <CertificateFieldChoice
+            parameters={parameters}
+            onParameterChange={onParameterChange}
+            disabled={disabled}
+          />
+          {details}
+          {placement && (
+            <FieldChoice
+              placement={placement}
+              parameters={parameters}
+              onParameterChange={onParameterChange}
+              disabled={disabled}
+            />
+          )}
+          {!parameters.fieldName &&
+            (placement ? (
+              <PlaceOnPage
+                placement={placement}
+                parameters={parameters}
+                onParameterChange={onParameterChange}
                 disabled={disabled}
               />
-            </>
-          )}
-
-          <Divider />
-
-          <SignatureAttributePicker
-            selected={parameters.visibleAttributes}
-            onChange={(selected) =>
-              onParameterChange("visibleAttributes", selected)
-            }
+            ) : (
+              <PageNumberInput
+                parameters={parameters}
+                onParameterChange={onParameterChange}
+                disabled={disabled}
+              />
+            ))}
+          <RepeatOnPagesChoice
+            parameters={parameters}
+            onParameterChange={onParameterChange}
             disabled={disabled}
           />
         </Stack>
+      ) : (
+        details
       )}
     </Stack>
+  );
+};
+
+type SectionProps = Pick<
+  SignatureAppearanceSettingsProps,
+  "parameters" | "onParameterChange"
+> & { disabled: boolean };
+
+type DetailKey = "reason" | "location" | "name";
+
+const SignatureDetails = ({
+  parameters,
+  onParameterChange,
+  disabled,
+}: SectionProps) => {
+  const { t } = useTranslation();
+  const [opened, setOpened] = useState<DetailKey[]>([]);
+  const [justOpened, setJustOpened] = useState<DetailKey | null>(null);
+  const inputs = useRef(new Map<DetailKey, HTMLInputElement>());
+  useEffect(() => {
+    if (!justOpened) return;
+    const input = inputs.current.get(justOpened);
+    input?.scrollIntoView({ block: "center", behavior: "smooth" });
+    input?.focus({ preventScroll: true });
+    setJustOpened(null);
+  }, [justOpened]);
+  const details: {
+    key: DetailKey;
+    label: string;
+    info: string;
+    placeholder?: string;
+  }[] = [
+    {
+      key: "reason",
+      label: t("certSign.reason", "Reason"),
+      info: t(
+        "certSign.reasonInfo",
+        'Why you are signing, such as "Approval". Stored in the signature\'s details.',
+      ),
+    },
+    {
+      key: "location",
+      label: t("certSign.location", "Location"),
+      info: t(
+        "certSign.locationInfo",
+        'Where you signed, such as "London Office". Stored in the signature\'s details; it does not move the signature on the page.',
+      ),
+    },
+    {
+      key: "name",
+      label: t("certSign.appearance.options.signerName", "Signer name"),
+      info: t(
+        "certSign.appearance.options.signerNameInfo",
+        'Shown as the large name on the signature. "Digitally signed by" always names the certificate\'s holder.',
+      ),
+      placeholder: t(
+        "certSign.appearance.options.signerNamePlaceholder",
+        "Uses the name on the certificate",
+      ),
+    },
+  ];
+  const shown = details.filter(
+    (detail) => parameters[detail.key] || opened.includes(detail.key),
+  );
+  const hidden = details.filter((detail) => !shown.includes(detail));
+  const close = (key: DetailKey) => {
+    setOpened((keys) => keys.filter((open) => open !== key));
+    onParameterChange(key, "");
+  };
+
+  return (
+    <Stack gap="xs">
+      {shown.map((detail) => (
+        <TextInput
+          key={detail.key}
+          {...infoLabelProps(detail.label, detail.info)}
+          placeholder={detail.placeholder}
+          value={parameters[detail.key]}
+          className={privateContentClassName}
+          ref={(input) => {
+            if (input) inputs.current.set(detail.key, input);
+            else inputs.current.delete(detail.key);
+          }}
+          onChange={(event) =>
+            onParameterChange(detail.key, event.currentTarget.value)
+          }
+          disabled={disabled}
+          rightSection={
+            <ActionIcon
+              variant="tertiary"
+              accent="neutral"
+              size="sm"
+              onClick={() => close(detail.key)}
+              disabled={disabled}
+              aria-label={t(
+                "certSign.appearance.details.remove",
+                "Remove {{detail}}",
+                { detail: detail.label },
+              )}
+            >
+              <Icon name="x" size={14} />
+            </ActionIcon>
+          }
+        />
+      ))}
+      {hidden.length > 0 && (
+        <Group gap="xs">
+          {hidden.map((detail) => (
+            <Button
+              key={detail.key}
+              variant="tertiary"
+              size="sm"
+              leftSection={<Icon name="plus" size={14} />}
+              onClick={() => {
+                setOpened((keys) => [...keys, detail.key]);
+                setJustOpened(detail.key);
+              }}
+              disabled={disabled}
+            >
+              {detail.label}
+            </Button>
+          ))}
+        </Group>
+      )}
+    </Stack>
+  );
+};
+
+const GraphicChoice = ({
+  parameters,
+  onParameterChange,
+  disabled,
+}: SectionProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <Stack gap="xs">
+      <Text size="sm" fw={500}>
+        {t("certSign.appearance.graphic.title", "Beside the details")}
+      </Text>
+      <SegmentedControl<StampGraphic>
+        fullWidth
+        value={parameters.stampGraphic}
+        onChange={(next) => onParameterChange("stampGraphic", next)}
+        disabled={disabled}
+        ariaLabel={t("certSign.appearance.graphic.title", "Beside the details")}
+        options={[
+          {
+            value: "NAME",
+            label: t("certSign.appearance.graphic.name", "Name"),
+          },
+          {
+            value: "IMAGE",
+            label: t("certSign.appearance.graphic.image", "Image"),
+          },
+          {
+            value: "NONE",
+            label: t("certSign.appearance.graphic.none", "None"),
+          },
+        ]}
+      />
+      {parameters.stampGraphic === "IMAGE" && (
+        <SavedOrNewImage
+          value={parameters.signatureImage}
+          onChange={(file) => onParameterChange("signatureImage", file)}
+          disabled={disabled}
+        />
+      )}
+    </Stack>
+  );
+};
+
+const SavedOrNewImage = ({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: File | undefined;
+  onChange: (file: File | undefined) => void;
+  disabled: boolean;
+}) => {
+  const { t } = useTranslation();
+  const library = useSignatureLibrary();
+  const [adding, setAdding] = useState(false);
+  const saved = useMemo(
+    () =>
+      [...library.mine, ...library.shared].map((signature) => ({
+        id: signature.id,
+        label: signature.label,
+        dataUrl: signature.dataUrl,
+      })),
+    [library.mine, library.shared],
+  );
+
+  const add = async (created: CreatedSignature, choice: SaveChoice | null) => {
+    const entry = choice ? await library.save(created, choice) : null;
+    onChange(
+      await signatureImageFile({
+        id: entry?.key,
+        label:
+          entry?.label ??
+          uniqueName(defaultSignatureName(t, created.source), library.labels),
+        dataUrl: created.dataUrl,
+      }),
+    );
+    setAdding(false);
+  };
+
+  return (
+    <>
+      <SignatureImagePicker
+        saved={saved}
+        value={value}
+        onChange={onChange}
+        onAdd={() => setAdding(true)}
+        disabled={disabled}
+      />
+      {adding && (
+        <CreateSignatureModal
+          initialTab="draw"
+          onClose={() => setAdding(false)}
+          onCreate={add}
+          limits={{
+            canSave: !library.isFull,
+            maxLimit: library.maxLimit,
+            canShare: library.canShare,
+            browserStorage: library.browserStorage,
+            remainingSlots: library.maxLimit - library.count,
+          }}
+          showPhoneTab={false}
+          existingLabels={library.labels}
+        />
+      )}
+    </>
+  );
+};
+
+const FieldChoice = ({
+  placement,
+  parameters,
+  onParameterChange,
+  disabled,
+}: SectionProps & { placement: CertSignStampPlacement }) => {
+  const { t } = useTranslation();
+  const fields = placement.layout?.emptyFields ?? [];
+  if (fields.length === 0) return null;
+
+  return (
+    <SignatureFieldList
+      title={t("certSign.appearance.placement.where", "Where to sign")}
+      fields={fields}
+      selected={parameters.fieldName ?? null}
+      onChange={(fieldName) =>
+        onParameterChange("fieldName", fieldName ?? undefined)
+      }
+      allowCustomPosition
+      disabled={disabled}
+    />
+  );
+};
+
+const PlaceOnPage = ({
+  placement,
+  parameters,
+  onParameterChange,
+  disabled,
+}: SectionProps & { placement: CertSignStampPlacement }) => {
+  const { t } = useTranslation();
+  const icon = <Icon name="locate-fixed" size={16} />;
+
+  if (placement.placing) {
+    return (
+      <Stack gap="xs">
+        <Banner
+          tone="info"
+          icon={icon}
+          description={t(
+            "certSign.appearance.placement.clickPage",
+            "Click the page where the signature should go.",
+          )}
+        />
+        <Group gap="xs">
+          <Button variant="secondary" size="sm" onClick={placement.remove}>
+            {t("certSign.appearance.placement.cancel", "Cancel")}
+          </Button>
+        </Group>
+      </Stack>
+    );
+  }
+
+  if (placement.placedPage !== null) {
+    return (
+      <Stack gap="xs">
+        <Banner
+          tone="neutral"
+          icon={icon}
+          title={t(
+            "certSign.appearance.placement.placedOnPage",
+            "Placed on page {{page}}",
+            { page: placement.placedPage },
+          )}
+          description={t(
+            "certSign.appearance.placement.adjust",
+            "Drag the box to move it, or drag a corner to resize it.",
+          )}
+        />
+        <Group gap="xs">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={placement.place}
+            disabled={disabled}
+          >
+            {t("certSign.appearance.placement.placeAgain", "Place again")}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={placement.remove}
+            disabled={disabled}
+          >
+            {t("certSign.appearance.placement.useCorner", "Use default corner")}
+          </Button>
+        </Group>
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="xs">
+      <Button
+        variant="secondary"
+        leftSection={icon}
+        onClick={placement.place}
+        disabled={disabled}
+      >
+        {t("certSign.appearance.placement.place", "Place on the page")}
+      </Button>
+      <PageNumberInput
+        parameters={parameters}
+        onParameterChange={onParameterChange}
+        disabled={disabled}
+        label={t(
+          "certSign.appearance.placement.cornerPage",
+          "Or the bottom-right corner of page",
+        )}
+      />
+    </Stack>
+  );
+};
+
+const PageNumberInput = ({
+  parameters,
+  onParameterChange,
+  disabled,
+  label,
+}: SectionProps & { label?: string }) => {
+  const { t } = useTranslation();
+  return (
+    <NumberInput
+      label={label ?? t("certSign.pageNumber", "Page Number")}
+      value={parameters.pageNumber}
+      onChange={(value) =>
+        onParameterChange("pageNumber", typeof value === "number" ? value : 1)
+      }
+      min={1}
+      disabled={disabled}
+    />
   );
 };
 
