@@ -52,7 +52,13 @@ async function storedCount(page: Page): Promise<number> {
 }
 
 /** What the Rust side does on a file-association open. */
-async function openFromExplorer(page: Page, opened = PATH): Promise<void> {
+async function sendOpen(page: Page, opened = PATH): Promise<void> {
+  // The app subscribes after it mounts, which a reload has to go through again.
+  await expect
+    .poll(() =>
+      page.evaluate(() => Reflect.get(window, "__listeners")?.["files-changed"]),
+    )
+    .toBeDefined();
   await page.evaluate((path) => {
     Reflect.set(window, "__openedPaths", [path]);
     const callbacks = Reflect.get(window, "__callbacks");
@@ -62,9 +68,17 @@ async function openFromExplorer(page: Page, opened = PATH): Promise<void> {
       payload: null,
     });
   }, opened);
+}
+
+async function expectViewer(page: Page): Promise<void> {
   await expect(page.locator('[data-page-index="0"]').first()).toBeVisible({
     timeout: 30_000,
   });
+}
+
+async function openFromExplorer(page: Page, opened = PATH): Promise<void> {
+  await sendOpen(page, opened);
+  await expectViewer(page);
 }
 
 async function reload(page: Page): Promise<void> {
@@ -96,10 +110,12 @@ test("a file that changed on disk since is stored again", async ({ page }) => {
   await openFromExplorer(page);
   await expect.poll(() => storedCount(page)).toBe(1);
 
-  // After the reload: restoring the session reconciles the open record with disk.
   await reload(page);
+  // A change made while the session is still restoring settles that record in place.
+  await expectViewer(page);
   await setDisk(page, { [PATH]: { bytes: BYTES, modifiedMs: MTIME + 60_000 } });
-  await openFromExplorer(page);
+  // With two files open the editor may show the file list, not the viewer.
+  await sendOpen(page);
   await expect.poll(() => storedCount(page)).toBe(2);
 });
 
