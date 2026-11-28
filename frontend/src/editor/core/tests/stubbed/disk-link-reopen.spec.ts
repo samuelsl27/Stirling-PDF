@@ -56,7 +56,9 @@ async function sendOpen(page: Page, opened = PATH): Promise<void> {
   // The app subscribes after it mounts, which a reload has to go through again.
   await expect
     .poll(() =>
-      page.evaluate(() => Reflect.get(window, "__listeners")?.["files-changed"]),
+      page.evaluate(
+        () => Reflect.get(window, "__listeners")?.["files-changed"],
+      ),
     )
     .toBeDefined();
   await page.evaluate((path) => {
